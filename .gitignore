@@ -1,0 +1,12 @@
+# Syncthing / desktop artifacts
+.stfolder/
+.stignore
+.sync-conflict-*
+.directory
+
+# Vendored AdminLTE 4.10.1 (re-add via composer/npm when the PHP app needs it)
+/package/
+
+# Skills synced from ~/.agents/skills by Syncthing, not part of this project
+/.agents/
+skills-lock.json
