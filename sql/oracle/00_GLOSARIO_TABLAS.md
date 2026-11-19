@@ -3,7 +3,7 @@
 **Qué es este archivo.** La llave para leer la base sin adivinar: qué significa cada prefijo y
 sufijo de los nombres, qué valores admite cada columna de estado, y qué guarda cada tabla.
 **Para quién:** cualquiera del equipo que abra el esquema, y para la defensa.
-**Estado:** describe el esquema **v3** (21 tablas). Los nombres de las tablas nuevas son los
+**Estado:** describe el esquema **v3** (22 tablas). Los nombres de las tablas nuevas son los
 canónicos; si alguna vez discrepan, manda `04_ddl_v3.sql`.
 
 ---
@@ -226,12 +226,21 @@ intervalos. Una reserva `CANCELADA` no bloquea.
 | `ID_EQUIPO` | llave interna |
 | `ID_TORNEO` | a qué torneo se inscribe |
 | `NOMBRE_EQUIPO` | único dentro del torneo |
-| `ID_CLIENTE_RESPONSABLE` | el cliente que responde por el equipo |
+| `ID_CLIENTE_RESPONSABLE` | el capitán: responde por el equipo y es su primer jugador |
 | `FECHA_INSCRIPCION_EQUIPO` | cuándo se inscribió |
-| `ESTADO_EQUIPO` | `INSCRITO` o `RETIRADO` |
+| `ESTADO_EQUIPO` | `INSCRITO` o `RETIRADO`; retirado libera cupo |
 
-**`SGCD_EQUIPO_JUGADORES`** — quiénes juegan. PK `(ID_EQUIPO, ID_CLIENTE)`: un cliente no puede
-estar dos veces en el mismo equipo, sí en dos torneos distintos.
+**`SGCD_JUGADORES`** — quién juega torneos. Identidad liviana: **no** es una ficha de cliente.
+| Columna | Significado |
+|---|---|
+| `ID_JUGADOR` | llave interna, la que usa la inscripción |
+| `RUT_JUGADOR` + `DV_JUGADOR` | identificación que se pide al capitán; el par es único |
+| `NOMBRE_JUGADOR` | nombre tal como se inscribió; si hay `ID_CLIENTE`, se copia de la ficha |
+| `ID_CLIENTE` | enlace opcional: se rellena solo si ese RUT ya es cliente del recinto |
+
+**`SGCD_EQUIPO_JUGADORES`** — la plantilla. PK `(ID_EQUIPO, ID_JUGADOR)`: el mismo jugador no
+puede estar dos veces en un equipo, sí en dos torneos distintos. La regla "un jugador, un solo
+equipo por torneo" vive en el paquete, porque cruza `EQUIPOS`.
 
 **El arriendo de cancha del torneo no es una tabla aparte:** son filas de `SGCD_RESERVAS` con
 `TIPO_RESERVA = 'TORNEO'` e `ID_TORNEO` apuntando al evento.
@@ -257,7 +266,7 @@ pago de inscripción a torneo, se agrega un cuarto brazo y nada más.
 ```
 RECINTOS ──┬── CANCHAS ──┬── CANCHAS_MODALIDADES ──┬── TARIFAS
            │             │                          └── RESERVAS ──┬── PAGOS
-           ├── HORARIOS  │                                          └── TORNEOS ── EQUIPOS ── EQUIPO_JUGADORES
+           ├── HORARIOS  │                                          └── TORNEOS ── EQUIPOS ── EQUIPO_JUGADORES ── JUGADORES
            └── TORNEOS   │
 DEPORTES ── MODALIDADES ─┘
 
@@ -266,7 +275,7 @@ CLIENTES ──┬── CREDENCIALES  (1:0..1, opcional)
            ├── MOVIMIENTOS_PUNTOS
            ├── RESERVAS
            ├── EQUIPOS
-           ├── EQUIPO_JUGADORES
+           ├── JUGADORES (enlace opcional por RUT)
            └── OPERACIONES_IMPLEMENTOS ── DETALLES_IMPLEMENTOS ── ARTICULOS
 
 ADMINISTRADORES ──┬── CREDENCIALES (1:0..1)

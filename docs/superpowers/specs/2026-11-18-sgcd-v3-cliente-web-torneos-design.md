@@ -82,7 +82,7 @@ autenticación. La credencial es un accesorio 1:1 de la ficha, con el mismo XOR 
 
 ## 7. Esquema v3
 
-Se reconstruye el esquema completo (17 → **21** tablas). `sql/oracle/01..03` quedan como registro de
+Se reconstruye el esquema completo (17 → **22** tablas). `sql/oracle/01..03` quedan como registro de
 la v2; la v3 entra en archivos nuevos (§9).
 
 ### 7.1 `SGCD_CLIENTES` — cambia
@@ -149,17 +149,29 @@ administrador; en el mostrador ocurre en el mismo acto en que confirma la reserv
   parcial con `CASE WHEN ESTADO_RESERVA <> 'CANCELADA' THEN ... END`.
 - `ESTADO_RESERVA` conserva los cuatro valores actuales; `PENDIENTE` **bloquea** el horario.
 
-### 7.4 `SGCD_TORNEOS`, `SGCD_EQUIPOS`, `SGCD_EQUIPO_JUGADORES` — nuevas
+### 7.4 `SGCD_TORNEOS`, `SGCD_EQUIPOS`, `SGCD_JUGADORES`, `SGCD_EQUIPO_JUGADORES` — nuevas
 
 - `SGCD_TORNEOS`: `ID_TORNEO`, `ID_RECINTO`, `ID_MODALIDAD`, `NOMBRE_TORNEO`,
   `FECHA_INICIO_TORNEO`, `FECHA_FIN_TORNEO`, `CUPOS_EQUIPOS_TORNEO`,
   `DESCUENTO_PORCENTAJE_TORNEO NUMBER(5,2) DEFAULT 0` (0–100, §7.6),
   `ESTADO_TORNEO` ∈ `PLANIFICADO`/`EN_CURSO`/`FINALIZADO`/`CANCELADO`.
-- `SGCD_EQUIPOS`: `ID_EQUIPO`, `ID_TORNEO`, `NOMBRE_EQUIPO`, `ID_CLIENTE_RESPONSABLE`,
-  `ESTADO` ∈ `INSCRITO`/`RETIRADO`; `UNIQUE (ID_TORNEO, NOMBRE_EQUIPO)`.
-- `SGCD_EQUIPO_JUGADORES`: PK `(ID_EQUIPO, ID_CLIENTE)`; un integrante no puede estar dos veces
-  en el mismo equipo. Un torneo individual se modela con equipos de un jugador, así que no hace
-  falta una segunda estructura para "participante suelto".
+- `SGCD_EQUIPOS`: `ID_EQUIPO`, `ID_TORNEO`, `NOMBRE_EQUIPO`, `ID_CLIENTE_RESPONSABLE` (capitán,
+  que además es el primer jugador), `FECHA_INSCRIPCION_EQUIPO`,
+  `ESTADO_EQUIPO` ∈ `INSCRITO`/`RETIRADO`; `UNIQUE (ID_TORNEO, NOMBRE_EQUIPO)`.
+- `SGCD_JUGADORES`: registro liviano de quien juega torneos, **sin ficha de cliente**.
+  `ID_JUGADOR`, `RUT_JUGADOR NUMBER(8)`, `DV_JUGADOR CHAR(1)`, `NOMBRE_JUGADOR`,
+  `ID_CLIENTE NULL` (enlace si ese RUT ya es cliente); `UNIQUE (RUT_JUGADOR, DV_JUGADOR)`.
+- `SGCD_EQUIPO_JUGADORES`: PK `(ID_EQUIPO, ID_JUGADOR)`; un jugador no puede estar dos veces en el
+  mismo equipo. Un torneo individual se modela con equipos de un jugador, así que no hace falta una
+  estructura aparte para "participante suelto".
+
+**Regla de identidad (decidido 2026-11-19).** El capitán inscribe a sus jugadores con **nombre y
+RUT**; no se crea una ficha por jugador. La fila de `SGCD_JUGADORES` es la identidad del jugador,
+con el RUT como clave natural, y se reutiliza en torneos posteriores sin volver a teclearlo. Si el
+RUT ya corresponde a un cliente, `ID_CLIENTE` se rellena en el acto y el nombre se toma de la ficha:
+nadie queda duplicado ni con dos grafías, y si más adelante ese jugador se hace socio, el enlace ya
+existe. Es el mismo principio de §7.2 aplicado hacia el otro lado: la identidad de una persona
+nunca es una fila de inscripción.
 
 Pago de inscripción: **no se modela en esta entrega**. Cuando se necesite, `SGCD_PAGOS` gana
 `ID_EQUIPO` como cuarto brazo del XOR ya existente; no toca ninguna otra tabla.
@@ -167,7 +179,8 @@ Pago de inscripción: **no se modela en esta entrega**. Cuando se necesite, `SGC
 ### 7.5 Índices
 
 Los 14 de la v2 se mantienen. Se agregan: `SGCD_CREDENCIALES (ID_CLIENTE)`,
-`(ID_ADMINISTRADOR)`, `SGCD_EQUIPOS (ID_TORNEO)`, `SGCD_EQUIPO_JUGADORES (ID_CLIENTE)`,
+`(ID_ADMINISTRADOR)`, `SGCD_EQUIPOS (ID_TORNEO)`, `SGCD_EQUIPO_JUGADORES (ID_JUGADOR)`,
+`SGCD_JUGADORES (ID_CLIENTE)`,
 `SGCD_RESERVAS (ID_TORNEO)`, `SGCD_CLIENTES (TELEFONO_CLIENTE)`, `(CORREO_CLIENTE)`.
 
 ### 7.6 Precio del bloque de torneo — **decidido: O4** (2026-11-18)
@@ -195,7 +208,7 @@ teclea. `arrendar_bloque` le pasa el porcentaje del torneo. El porcentaje vive d
 | `SGCD_PKG_AUTH` | `crear_credencial`, `verificar_cuenta(id_cred, id_admin)`, `obtener_credencial(login)` (devuelve hash, rol, estado, verificación, dueño) |
 | `SGCD_PKG_TARIFAS` | `tarifa_vigente(cancha, modalidad, fecha_hora) → valor_hora` |
 | `SGCD_PKG_RESERVAS` | `crear_reserva`, `confirmar_reserva`, `cancelar_reserva`, `consultar_disponibilidad` |
-| `SGCD_PKG_TORNEOS` | `crear_torneo`, `inscribir_equipo`, `agregar_jugador`, `arrendar_bloque` (llama a `crear_reserva` con `TIPO_RESERVA='TORNEO'`) |
+| `SGCD_PKG_TORNEOS` | `crear_torneo`, `inscribir_equipo` (cupos con bloqueo), `registrar_jugador` (alta o reutilización por RUT), `agregar_jugador`, `arrendar_bloque` (llama a `crear_reserva` con `TIPO_RESERVA='TORNEO'`) |
 | `SGCD_PKG_CONSULTAS` | `historial_cliente(id_cred)`, `estado_cuenta(id_cred)` — rechazan si la cuenta no está verificada |
 
 ### 8.0 Identidad del que llama
@@ -237,6 +250,20 @@ Son dos actos distintos: confirmar un bloque y responder por la identidad de una
 los ofrece en la misma pantalla, pero como dos llamadas (`confirmar_reserva`, `verificar_cuenta`).
 Si estuvieran acoplados, cada confirmación de mostrador regalaría acceso al historial de la ficha.
 
+### 8.4 Inscripción de un equipo, en orden
+
+1. `crear_torneo(...)` — lo hace un administrador; el torneo nace `PLANIFICADO`.
+2. `inscribir_equipo(id_torneo, nombre, id_cred_capitan)` — exige torneo en `PLANIFICADO`, bloquea
+   la fila del torneo (`FOR UPDATE`), cuenta los equipos `INSCRITO` contra `CUPOS_EQUIPOS_TORNEO`,
+   crea el equipo y registra al capitán como primer jugador.
+3. `agregar_jugador(id_equipo, rut, dv, nombre)` — valida el DV (módulo 11), exige torneo
+   `PLANIFICADO`, rechaza si ese jugador ya está en el equipo o en otro equipo del mismo torneo,
+   resuelve `ID_CLIENTE` por RUT y, si existe, copia el nombre de la ficha e ignora el tecleado.
+4. `arrendar_bloque(...)` — los bloques de cancha del evento, con el descuento del torneo.
+
+Retirar un equipo (`ESTADO_EQUIPO = 'RETIRADO'`) libera su cupo y **no** borra a sus jugadores:
+la inscripción se desactiva, no se destruye.
+
 ## 9. Entregables y orden de carga
 
 | Archivo | Contenido |
@@ -273,6 +300,13 @@ Se conservan las 26 de `02_pruebas_integridad.sql` y se agregan como mínimo:
 | Rol `CLIENTE` sin `ID_CLIENTE` | rechazo |
 | Login duplicado | rechazo |
 | Concurrencia: dos sesiones al mismo bloque | una gana, la otra recibe error (dos terminales y transcripción guardada en `docs/`; sin arnés automatizado) |
+| Jugador de torneo con RUT que no es cliente | acepta; **cero** filas nuevas en `SGCD_CLIENTES` |
+| Jugador con RUT de un cliente existente | enlaza `ID_CLIENTE` y copia el nombre de la ficha |
+| RUT repetido en el mismo equipo | rechazo |
+| Mismo jugador en dos equipos del mismo torneo | rechazo |
+| DV inválido en un jugador | rechazo |
+| Inscripción sobre `CUPOS_EQUIPOS_TORNEO` | rechazo |
+| Inscripción con el torneo en `EN_CURSO` | rechazo |
 
 ## 11. Lo que queda al constructor
 

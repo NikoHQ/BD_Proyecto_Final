@@ -144,5 +144,44 @@ corrige en la v3 quitando la modalidad de la clave y agregando el chequeo de int
 `SGCD_PKG_RESERVAS`.
 
 **Pendiente.** Plan de trabajo, `04_ddl_v3.sql`, `05_paquetes_plsql.sql`, `06_datos_catalogos_v3.sql`,
-`07_pruebas_v3.sql`, web de administración, y definir quién hace las pantallas del cliente final.
+`07_datos_operativos.sql`, `08_pruebas_v3.sql`, web de administración, y definir quién hace las
+pantallas del cliente final.
+
+---
+
+## 2026-11-19 — Inscripción de jugadores en torneos, sin fichas extra
+
+**Decisión.** El capitán inscribe a sus jugadores pidiendo **nombre y RUT**. No se crea una ficha
+de cliente por jugador. La identidad del participante es una fila de `SGCD_JUGADORES`, con el RUT
+como clave natural; si ese RUT ya corresponde a un cliente, `ID_CLIENTE` se enlaza solo y el nombre
+se copia de la ficha.
+
+**Por qué.** La versión anterior exigía que cada integrante fuera un cliente existente (PK
+`(ID_EQUIPO, ID_CLIENTE)`), lo que obligaba a crear 5 fichas por equipo para inscribir un torneo y
+llenaba `SGCD_CLIENTES` de gente que jugó una tarde. La alternativa de guardar solo un nombre libre
+perdía la identificación. El RUT da identidad sin ficha, y el enlace opcional evita la persona
+duplicada el día que ese jugador se haga socio.
+
+**Esquema: 21 → 22 tablas.**
+
+| Cambio | Detalle |
+|---|---|
+| Nueva `SGCD_JUGADORES` | `ID_JUGADOR`, `RUT_JUGADOR NUMBER(8)`, `DV_JUGADOR CHAR(1)`, `NOMBRE_JUGADOR`, `ID_CLIENTE NULL`; `UNIQUE (RUT_JUGADOR, DV_JUGADOR)` |
+| `SGCD_EQUIPO_JUGADORES` | PK `(ID_EQUIPO, ID_JUGADOR)` en vez de `(ID_EQUIPO, ID_CLIENTE)` |
+| `SGCD_EQUIPOS` | `ESTADO_EQUIPO` e `ID_CLIENTE_RESPONSABLE` pasan a nombre canónico; el capitán es el primer jugador |
+
+**Reglas en el paquete** (`SGCD_PKG_TORNEOS`): `registrar_jugador` (alta o reutilización por RUT),
+`agregar_jugador` valida DV módulo 11, torneo en `PLANIFICADO`, RUT no repetido en el equipo y
+jugador no inscrito en otro equipo del mismo torneo; `inscribir_equipo` cuenta cupos con
+`FOR UPDATE`; `RETIRADO` libera cupo sin borrar jugadores.
+
+**Archivos actualizados**
+
+| Ruta | Qué cambió |
+|---|---|
+| `docs/superpowers/specs/2026-11-18-sgcd-v3-cliente-web-torneos-design.md` | §7.1/§7.4/§7.5 (22 tablas, tres tablas de torneo + regla de identidad), §8.4 (orden de inscripción), §10 (7 casos de prueba nuevos) |
+| `sql/oracle/00_GLOSARIO_TABLAS.md` | `SGCD_JUGADORES` documentada, plantilla corregida, mapa de relaciones |
+
+**Orden vigente de los scripts:** `04_ddl_v3.sql` → `05_paquetes_plsql.sql` →
+`06_datos_catalogos_v3.sql` → `07_datos_operativos.sql` → `08_pruebas_v3.sql`.
 
