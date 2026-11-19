@@ -31,7 +31,7 @@ La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
 | `sql/oracle/02_pruebas_v2.sql` | 26 pruebas de integridad de la v2 | histórico |
 | `sql/oracle/03_catalogos_v2.sql` | Catálogos de la v2 (2 recintos, 78 tarifas) | histórico |
 | `sql/oracle/04_ddl_v3.sql` | **Esquema v3: 22 tablas** (cliente web, credenciales, torneos) | compilado |
-| `sql/oracle/05_paquetes_plsql.sql` | 6 paquetes de lógica de negocio | pendiente |
+| `sql/oracle/05_paquetes_plsql.sql` | **6 paquetes de lógica de negocio** (compilado: 12 objetos VALID) | compilado |
 | `sql/oracle/06_catalogos_v3.sql` | Catálogos para la v3 | pendiente |
 | `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
 | `sql/oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | pendiente |

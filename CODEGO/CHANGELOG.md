@@ -246,3 +246,52 @@ Pruebas de humo ejecutadas contra el DDL (todas con el resultado esperado):
 datos de la v3, pruebas completas, web de administración, y decidir quién hace las pantallas del
 cliente final.
 
+---
+
+## 2026-11-19 (3) — Secuencias + triggers, v3 compilada en `SGCD` y capa de servicios
+
+**Decisión.** Se reemplaza `IDENTITY` por **secuencia + trigger** en las 19 tablas con PK simple
+(las 3 de PK compuesta no llevan llave generada). El trigger solo asigna si el ID viene nulo, así
+las cargas con ID explícito siguen funcionando.
+
+**Motivo.** Lo pidió Naiko (probable exigencia de la rúbrica). Técnicamente no arregla los huecos:
+una secuencia se consume antes del `INSERT`, igual que `IDENTITY`. `NOCACHE` solo evita perder
+números por reinicio.
+
+**Compilación real en el esquema `SGCD`** (ya no en el de pruebas): se descartaron las 17 tablas
+de la v2. Sus catálogos son reproducibles, pero `03_catalogos_v2.sql` no sirve en la v3 porque
+reajusta columnas `IDENTITY`; los reemplaza `06_catalogos_v3.sql`.
+
+```
+TABLAS 22 · SECUENCIAS 19 · TRIGGERS 19 · INDICES 23 · CHECK 61 · FK 29 · UNIQUE 16
+errores de compilación: 0
+```
+
+**Archivo nuevo**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/05_paquetes_plsql.sql` | 6 paquetes, 12 objetos compilados `VALID`, 0 errores: `SGCD_PKG_CLIENTES`, `_AUTH`, `_TARIFAS`, `_RESERVAS`, `_TORNEOS`, `_CONSULTAS`. Incluye la tabla de códigos `ORA-200xx` en el encabezado. |
+
+**Pruebas de humo ejecutadas contra la base real** (todas con el resultado esperado):
+
+| Caso | Resultado |
+|---|---|
+| Trigger genera el ID con la secuencia | `ID_RECINTO = 1` |
+| `INSERT` con ID explícito | se respeta (`777`), la secuencia no salta |
+| Ficha con RUT válido (módulo 11) | creada |
+| RUT con DV inválido | `ORA-20001` |
+| **Solape parcial 19:00–20:00 vs 19:30–20:30** | **`ORA-20007`** |
+| Bloque adyacente 20:00–21:00 | aceptado |
+| Día sin horario (sábado en recinto que no abre) | `ORA-20005` |
+| Reserva web | creada `PENDIENTE` / `WEB` |
+| Cuenta no verificada pide historial | `ORA-20011` |
+| Tras `verificar_cuenta` | el historial se abre |
+
+**Bug encontrado y corregido en el camino.** Si el recinto no abría ese día, el `SELECT` del
+horario lanzaba `ORA-01403` en crudo; ahora `crear_reserva` lo traduce a `ORA-20005` con mensaje.
+
+**Estado de los datos.** La base quedó con el esquema v3 y los paquetes, **sin filas**: los
+catálogos de la v2 se perdieron al reconstruir y `06` todavía no existe. Toda prueba de humo se
+ejecutó dentro de una transacción con `ROLLBACK`.
+

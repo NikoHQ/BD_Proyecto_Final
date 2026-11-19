@@ -16,6 +16,8 @@ Ejecutar **en orden**, conectado como el esquema dueño (`SGCD`), no como `SYSTE
 | 08 | `oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | no, limpia al final |
 
 La v3 reemplaza a la v2: `04` borra lo que haya. Para conservar la v2 hay que exportarla antes.
+`03_catalogos_v2.sql` **no sirve en la v3**: reajusta columnas `IDENTITY`, que ya no existen. Los
+catálogos de la v3 van en `06`.
 
 ## SQLite — prototipo, no se entrega
 
