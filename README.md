@@ -21,7 +21,7 @@ La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
 | `material/` | Enunciados del ramo, plantillas y documentos de entrega |
 | `infra/` | Instalación del servidor (Apache, PHP, Oracle) e inventario de lo instalado |
-| `CODEGO/` | Bitácora, reportes fechados y copias espejo de los entregables |
+| `CODEGO/` | Bitácora y reportes fechados del avance |
 
 ## La base, en orden
 

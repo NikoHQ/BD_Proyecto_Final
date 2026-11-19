@@ -1,17 +1,19 @@
-# CODEGO — registro de entregables actualizados
+# CODEGO — bitácora del proyecto
 
-Carpeta aparte con **todo lo que vamos actualizando** del proyecto. No es fuente de verdad:
-lo canónico vive en su ruta normal del repo (`sql/oracle/`, `sql/sqlite/`, `infra/`…).
-Aquí se guarda una copia **en la misma ruta relativa**, para que se pueda entregar o revisar
-sin tocar los originales.
+Aquí vive **solo lo que no tiene otra casa**: este CHANGELOG, `ESTADO_ACTUAL.md` y los reportes
+fechados. El código y los documentos viven en su ruta canónica (`sql/`, `docs/`, `infra/`) y su
+historial es git.
 
 ## Reglas
 
-1. Un archivo por ruta canónica. Ruta espejo: `CODEGO/<misma ruta que en el repo>`.
-2. Cada actualización **sobrescribe** el espejo y **agrega una entrada** abajo con fecha.
-3. Los espejos no se editan a mano: si algo cambia, se cambia en la ruta canónica y se vuelve a copiar.
-4. Lo recibido de terceros (`17-11-26/`) no se copia aquí; solo lo que producimos nosotros.
-5. El historial real es git; este archivo es el índice legible.
+1. Nada de espejos. Los que había se eliminaron el 2026-11-19: duplicaban archivos que ya estaban
+   en su ruta y se desincronizaban. Si algo cambia, se cambia en su ruta canónica.
+2. Cada sesión de trabajo **agrega una entrada fechada** abajo, con los archivos tocados y el
+   resultado verificable.
+3. `ESTADO_ACTUAL.md` se reescribe cuando cambia el estado. Los `REPORTE_<fecha>.md` no se tocan:
+   son fotos del día.
+4. Las rutas de las entradas antiguas son históricas; el mapa vigente está en el `README.md` de
+   la raíz.
 
 ---
 
