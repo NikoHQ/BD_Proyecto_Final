@@ -243,8 +243,9 @@ Si estuvieran acoplados, cada confirmación de mostrador regalaría acceso al hi
 |---|---|
 | `sql/oracle/04_ddl_v3.sql` | esquema completo v3, autocontenido, con `DROP ... CASCADE CONSTRAINTS` al inicio |
 | `sql/oracle/05_paquetes_plsql.sql` | especificaciones y cuerpos de los seis paquetes |
-| `sql/oracle/06_datos_catalogos_v3.sql` | los catálogos de `03` adaptados (clientes demo, 2 credenciales, 1 torneo) |
-| `sql/oracle/07_pruebas_v3.sql` | pruebas negativas/positivas, cada una con su resultado esperado |
+| `sql/oracle/06_datos_catalogos_v3.sql` | los catálogos de `03` adaptados (recintos, instalaciones, deportes, modalidades, horarios, tarifas) |
+| `sql/oracle/07_datos_operativos.sql` | clientes, credenciales, membresías, reservas, pagos, implementos y torneos de ejemplo; re-ejecutable |
+| `sql/oracle/08_pruebas_v3.sql` | pruebas negativas/positivas, cada una con su resultado esperado |
 
 Los archivos `01..03` no se tocan: quedan como evidencia de la v2.
 
