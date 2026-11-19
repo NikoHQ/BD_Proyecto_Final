@@ -328,7 +328,7 @@ Un ingeniero Oracle que no participó en la conversación leyó el documento par
 | 2 | ¿La base hace cumplir "cuenta no verificada no ve historial"? | Sí: `p_id_cred` en las operaciones y `SGCD_PKG_CONSULTAS` con el chequeo dentro (§8.0). |
 | 3 | ¿Dónde se verifica la clave? | En PHP; la base guarda el hash. Los hashes demo se precalculan (§7.2). |
 | 4 | Si el RUT ya tiene ficha, ¿se engancha o se rechaza? | Se engancha, sin tocar la ficha, y la credencial nace `NO_VERIFICADA` (§8.2). |
-| 5 | ¿21 o 22 tablas? | 21. La 22 era un error mío al contar. `BLOQUEO_CANCHA` queda fuera de alcance (§3). |
+| 5 | ¿21 o 22 tablas? | 21 en ese momento (la 22 era un error mío al contar). Hoy son **22**: se agregó `SGCD_JUGADORES` el 2026-11-19 (§7.4). |
 | 6 | ¿`confirmar_reserva` verifica la cuenta? | No: dos llamadas distintas, misma pantalla (§8.3). |
 | 7 | ¿Qué evidencia para la prueba de concurrencia? | Dos terminales y transcripción guardada; sin arnés (§10). |
 | 8 | ¿Entra el bloqueo por mantención/feriados (D-4)? | No: `MANTENCION` es un estado indefinido de la cancha, sin fechas (§3). |
