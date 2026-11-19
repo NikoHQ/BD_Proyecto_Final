@@ -185,3 +185,62 @@ jugador no inscrito en otro equipo del mismo torneo; `inscribir_equipo` cuenta c
 **Orden vigente de los scripts:** `04_ddl_v3.sql` → `05_paquetes_plsql.sql` →
 `06_datos_catalogos_v3.sql` → `07_datos_operativos.sql` → `08_pruebas_v3.sql`.
 
+---
+
+## 2026-11-19 (2) — Repositorio ordenado + `04_ddl_v3.sql` compilado
+
+**Contexto.** Los nombres de archivo no decían qué era cada cosa (`sporting_database.sql`,
+`PPT Blanco2.pptx`, `17-11-26/3EB0036...mdj`). Se reorganiza el árbol y se escribe el DDL de la v3,
+que era el cuello de botella de todo lo demás.
+
+**Árbol nuevo**
+
+| Antes | Ahora |
+|---|---|
+| `UML.mdj`, `ES3.pdf`, `R2.pdf`, `Carta tipo…docx`, `PPT Blanco*.pptx`, `template.jpg` en la raíz | `docs/modelo/modelo-uml.mdj`, `material/enunciado-ES3.pdf`, `material/enunciado-R2.pdf`, `material/carta-validacion-problema.docx`, `material/plantilla-presentacion-N.pptx`, `material/portada-template.jpg` |
+| `17-11-26/3EB…-correccion_gpt.mdj`, `3EB…-tablas.sql`, `…jpg` | `docs/recibido/2026-11-17/modelo-gpt.mdj`, `tablas-v2.sql`, `imagen-referencia.jpg` |
+| `sql/oracle/00_GLOSARIO_TABLAS.md` | `docs/modelo/glosario-tablas.md` |
+| `sql/oracle/01_ddl_sgcd_corregido.sql`, `02_pruebas_integridad.sql`, `03_datos_catalogos.sql` | `sql/oracle/01_ddl_v2.sql`, `02_pruebas_v2.sql`, `03_catalogos_v2.sql` |
+| `sporting_database.sql` | `sql/sqlite/00_prototipo-modelo.sql` |
+| `docs/superpowers/specs/2026-11-18-…-design.md` | `docs/diseno/2026-11-18-diseno-v3-cliente-web-torneos.md` |
+| `ANALISIS_17-11-26_vs_nuestro.md` | `docs/modelo/analisis-modelo-recibido.md` |
+
+Se agregaron `README.md` en la raíz, en `sql/` y en `material/` (este último con la tabla de
+nombres originales, para no perder la referencia). Los movimientos se hicieron con `git mv`: el
+historial sigue a cada archivo. Las rutas de las entradas anteriores de este CHANGELOG son las
+históricas; el mapa vigente está en `README.md`.
+
+**Archivo nuevo**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/04_ddl_v3.sql` | DDL completo de la v3, autocontenido y re-ejecutable (borra las `SGCD_*` antes de crear). 22 tablas, 23 índices, 61 `CHECK` con nombre, 29 `FK`, 16 `UNIQUE`. |
+
+**Validación real.** Compilado en un esquema de pruebas `SGCDV3` del contenedor `oracle-free`
+(no se tocó `SGCD`, que sigue en v2):
+
+```
+TABLAS SGCD 22 · INDICES SGCD 23 · CHECK SGCD 61 · FK SGCD 29 · UNIQUE SGCD 16
+errores de compilación: 0
+```
+
+Pruebas de humo ejecutadas contra el DDL (todas con el resultado esperado):
+
+| Caso | Resultado |
+|---|---|
+| RUT duplicado | `ORA-00001` `UQ_SGCD_CLIENTE_RUT` |
+| DV inválido (`X`) | `ORA-02290` `CK_SGCD_CLIENTE_DV` |
+| Credencial sin dueño / con dos dueños | `ORA-02290` (`CK_SGCD_CRED_ROL_DUENO`, `CK_SGCD_CRED_DUENO`) |
+| Operador sin verificar | `ORA-02290` `CK_SGCD_CRED_PERSONAL_VERIF` |
+| Reserva `WEB` con administrador | `ORA-02290` `CK_SGCD_RES_ORIGEN_ADMIN` |
+| `NORMAL` con `ID_TORNEO` / `TORNEO` sin `ID_TORNEO` | `ORA-02290` `CK_SGCD_RES_TORNEO_ID` |
+| Bloque de torneo sin cliente | **acepta** |
+| Mismo bloque dos veces | `ORA-00001` `UX_SGCD_RESERVAS_BLOQUE` |
+| Solape parcial 19:00–20:00 vs 19:30–20:30 | **acepta** — el DDL solo atrapa inicios iguales; lo bloquea `SGCD_PKG_RESERVAS` |
+| Jugador de torneo enlazado a un cliente existente | **acepta** |
+| RUT de jugador duplicado | `ORA-00001` `UQ_SGCD_JUGADOR_RUT` |
+
+**Pendiente.** `05_paquetes_plsql.sql` (el solape parcial es el primer procedimiento), catálogos y
+datos de la v3, pruebas completas, web de administración, y decidir quién hace las pantallas del
+cliente final.
+
