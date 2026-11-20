@@ -1,11 +1,13 @@
 # SGCD — Sistema de Gestión de Centros Deportivos
 
 Proyecto de **INF324 / ES3**. Motor de base de datos Oracle 26ai Free en Docker, lógica de negocio
-en PL/SQL y una web de administración en PHP (pendiente).
+en PL/SQL y una web de administración en PHP y AdminLTE.
 **Entrega:** 2026-11-27.
 
-**Estado hoy:** esquema v3 definido y compilado (22 tablas). Sin PL/SQL escrito, sin capa web.
-La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
+**Estado de la entrega:** esquema v3 y paquetes PL/SQL disponibles. El panel tiene acceso de personal conectado a Oracle y flujos operativos de demostración pendientes de integración.
+
+- [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
+- [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
 
 ---
 
@@ -21,6 +23,7 @@ La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
 | `material/` | Enunciados del ramo, plantillas y documentos de entrega |
 | `infra/` | Instalación del servidor (Apache, PHP, Oracle) e inventario de lo instalado |
+| `web/` | Panel PHP, JavaScript por página, componentes y datos de demostración |
 | `CODEGO/` | Bitácora y reportes fechados del avance |
 
 ## La base, en orden
@@ -70,5 +73,5 @@ documento en el mismo commit.
 
 1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo.
 2. `08_pruebas_v3.sql` con la batería completa.
-3. Web de administración (PHP + AdminLTE).
+3. Conectar la operación del panel a PHP y Oracle, incluida la recuperación de contraseña.
 4. Definir quién hace las pantallas del cliente final.
