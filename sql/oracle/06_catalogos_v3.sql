@@ -66,6 +66,22 @@ DELETE FROM SGCD_ADMINISTRADORES;
 COMMIT;
 
 -- ---------------------------------------------------------------------
+-- 0.1 Reiniciar las secuencias a 1 antes de cargar. Las tablas acaban de
+--     quedar vacias, asi que los IDs del catalogo salen continuos (1..n) y
+--     las capturas no muestran huecos. Al final se reposicionan en MAX+1.
+-- ---------------------------------------------------------------------
+ALTER SEQUENCE SGCD_SEQ_RECINTOS            RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_CANCHAS             RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_DEPORTES            RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_MODALIDADES         RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_HORARIOS            RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_TARIFAS             RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_PLANES_MEMBRESIA    RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_ARTICULOS           RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_ADMINISTRADORES     RESTART START WITH 1;
+ALTER SEQUENCE SGCD_SEQ_CREDENCIALES        RESTART START WITH 1;
+
+-- ---------------------------------------------------------------------
 -- 1. RECINTOS
 -- ---------------------------------------------------------------------
 INSERT INTO SGCD_RECINTOS (ID_RECINTO, NOMBRE_RECINTO, DIRECCION_RECINTO, COMUNA_RECINTO, TELEFONO_RECINTO)
