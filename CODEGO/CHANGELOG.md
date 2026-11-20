@@ -292,6 +292,54 @@ errores de compilación: 0
 horario lanzaba `ORA-01403` en crudo; ahora `crear_reserva` lo traduce a `ORA-20005` con mensaje.
 
 **Estado de los datos.** La base quedó con el esquema v3 y los paquetes, **sin filas**: los
-catálogos de la v2 se perdieron al reconstruir y `06` todavía no existe. Toda prueba de humo se
-ejecutó dentro de una transacción con `ROLLBACK`.
+catálogos de la v2 se perdieron al reconstruir y `06` todavía no existía (se escribió en la entrada
+siguiente). Toda prueba de humo se ejecutó dentro de una transacción con `ROLLBACK`.
+
+---
+
+## 2026-11-19 (4) — Catálogos de la v3 cargados
+
+**Decisiones aplicadas** (aprobadas por Naiko): catálogo completo **+ 2 credenciales de personal**;
+datos de la v2 copiados tal cual (la ubicación de los recintos sigue en discusión); IDs explícitos
+con reposicionamiento de secuencias al final; guarda contra datos transaccionales; y **un ejemplo
+de vigencia de tarifa** para que esa columna deje de estar muerta.
+
+**Archivo nuevo**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/06_catalogos_v3.sql` | Catálogos v3: 2 recintos, 7 instalaciones, 5 deportes, 6 modalidades, 10 pares, 14 horarios, **80 tarifas** (78 base + 2 de temporada alta), 3 planes, 8 artículos, 2 administradores y 2 credenciales demo (`ADMIN` / `OPERADOR`, clave `Demo1234`). Idempotente y con `WHENEVER SQLERROR EXIT FAILURE`. |
+
+**Resultado verificado**
+
+```
+RECINTOS 2 · CANCHAS 7 · DEPORTES 5 · MODALIDADES 6 · CANCHA_MOD 10 · HORARIOS 14
+TARIFAS 80 · PLANES 3 · ARTICULOS 8 · ADMINISTRADORES 2 · CREDENCIALES 2
+Secuencias reposicionadas: 10   (SGCD_SEQ_RECINTOS -> 3, SGCD_SEQ_CANCHAS -> 8, SGCD_SEQ_TARIFAS -> 244 ...)
+```
+
+**Vigencia de tarifa comprobada contra el paquete** (Padel dobles, sábado, 09:00–20:00):
+
+| Fecha de la reserva | `tarifa_vigente` |
+|---|---|
+| 2026-11-21 | 15.000 |
+| 2026-12-05 | 18.000 |
+| 2027-01-10 | 18.000 |
+
+Es decir: la fila nueva se sobrepone desde el 1 de diciembre y nada anterior se reescribe.
+
+**Dos defectos corregidos en el camino**
+
+1. `EXISTENCIAS_ARRIENDO_ARTICULO` es `NOT NULL` con default 0; el artículo "Silbato" intentaba
+   insertar `NULL`. Corregido a 0.
+2. La verificación de secuencias usaba `USER_SEQUENCES`, que mira el esquema **del usuario
+   conectado**. Ejecutando como `SYSTEM` con `CURRENT_SCHEMA=SGCD` devolvía las secuencias de
+   `SYSTEM` y no imprimía nada. Ahora usa `ALL_SEQUENCES` filtrado por `CURRENT_SCHEMA`.
+
+**Dato técnico útil.** `ALTER SEQUENCE ... RESTART START WITH n` fija el **próximo** valor y admite
+bajar: tras llegar a 3, un `RESTART START WITH 1` devuelve 1. Por eso el script calcula
+`MAX(id)+1` en lugar de escribir un número fijo: un valor fijo mal puesto duplicaría claves.
+
+**Idempotencia comprobada.** El script se ejecutó tres veces seguidas; el estado final siempre fue
+el mismo y las secuencias siguieron por delante del máximo.
 

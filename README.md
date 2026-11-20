@@ -32,7 +32,7 @@ La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
 | `sql/oracle/03_catalogos_v2.sql` | Catálogos de la v2 (2 recintos, 78 tarifas) | histórico |
 | `sql/oracle/04_ddl_v3.sql` | **Esquema v3: 22 tablas** (cliente web, credenciales, torneos) | compilado |
 | `sql/oracle/05_paquetes_plsql.sql` | **6 paquetes de lógica de negocio** (compilado: 12 objetos VALID) | compilado |
-| `sql/oracle/06_catalogos_v3.sql` | Catálogos para la v3 | pendiente |
+| `sql/oracle/06_catalogos_v3.sql` | Catálogos de la v3 (80 tarifas, 2 credenciales demo) | cargado |
 | `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
 | `sql/oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | pendiente |
 
@@ -68,8 +68,7 @@ documento en el mismo commit.
 
 ## Qué falta
 
-1. `05_paquetes_plsql.sql` — empezando por `SGCD_PKG_RESERVAS` (solape de horarios).
-2. `06_catalogos_v3.sql` y `07_datos_operativos.sql`.
-3. `08_pruebas_v3.sql` con la batería completa.
-4. Web de administración (PHP + AdminLTE).
-5. Definir quién hace las pantallas del cliente final.
+1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo.
+2. `08_pruebas_v3.sql` con la batería completa.
+3. Web de administración (PHP + AdminLTE).
+4. Definir quién hace las pantallas del cliente final.
