@@ -80,6 +80,10 @@ function apiSesion(array $perfiles): array
     if (!in_array($cuenta['ROL'], $perfiles, true)) {
         apiFail('Tu perfil no permite esta operacion.', 403);
     }
+    // Los triggers de auditoria atribuyen el cambio a CLIENT_IDENTIFIER. Se
+    // declara aqui, una vez por peticion, con el administrador de la sesion.
+    apiLlamar('BEGIN DBMS_SESSION.SET_IDENTIFIER(:id); END;',
+        ['id' => (int) $cuenta['PERSONAL']]);
     return $cuenta;
 }
 

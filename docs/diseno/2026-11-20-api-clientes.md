@@ -42,6 +42,8 @@ Todas las respuestas son JSON:
 - `crear` es idempotente por RUT: si la ficha existe devuelve `200` con `creada: false` en vez de
   duplicarla.
 - Toda mutación confirma con `oci_commit`; si la base falla, no se confirma nada.
+- En cada petición autenticada, `apiSesion` llama a `DBMS_SESSION.SET_IDENTIFIER` con el
+  `ID_ADMINISTRADOR` de la sesión: los triggers de auditoría registran así quién cambió la ficha.
 - La ficha devuelta incluye `reservas`, `reservas_vigentes`, `importe_pagado`, `cuenta_web` y
   `eventos_auditoria`, para que el panel no tenga que pedir tres veces.
 
