@@ -1,0 +1,44 @@
+name: sgcd
+
+services:
+  oracle:
+    image: gvenzl/oracle-free:23.26.3-slim
+    container_name: sgcd-oracle
+    shm_size: 1g
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: SGCD
+      APP_USER_PASSWORD: ${SGCD_DB_PASSWORD}
+    ports:
+      - "1521:1521"
+    volumes:
+      - sgcd-oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  app:
+    image: donvito/php-oci8:8.4
+    platform: linux/amd64
+    container_name: sgcd-app
+    working_dir: /var/www/html
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/var/www/html"]
+    environment:
+      SGCD_DB_HOST: oracle
+      SGCD_DB_PORT: "1521"
+      SGCD_DB_SERVICE: FREEPDB1
+      SGCD_DB_USER: SGCD
+      SGCD_DB_PASSWORD: ${SGCD_DB_PASSWORD}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./web:/var/www/html
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+volumes:
+  sgcd-oracle-data:

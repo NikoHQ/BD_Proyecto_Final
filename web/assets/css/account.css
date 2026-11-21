@@ -1,0 +1,5 @@
+.sgcd-login { padding:1.5rem 1rem; min-height:100vh; background:#eef5f7; }
+.sgcd-login .login-box { width:min(100%,30rem); }
+.sgcd-login .card-outline { border-top:3px solid #087c65; }
+.account-menu { min-width:15rem; }
+.account-workspace { max-width:1050px; }

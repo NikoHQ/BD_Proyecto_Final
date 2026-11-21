@@ -1,13 +1,16 @@
 # SGCD — Sistema de Gestión de Centros Deportivos
 
 Proyecto de **INF324 / ES3**. Motor de base de datos Oracle 26ai Free en Docker, lógica de negocio
-en PL/SQL y una web de administración en PHP (pendiente).
+en PL/SQL y una web de administración en PHP y AdminLTE.
 **Entrega:** 2026-11-27.
 
 **Estado hoy (2026-11-20):** esquema v3 compilado en `SGCD` con **23 tablas** (incluye la
-auditoría de clientes), 6 paquetes PL/SQL `VALID` y catálogos v3 cargados. Sin capa web en la
-raíz del repo; el panel PHP/AdminLTE llega en la rama `codex/frontend-admin-demo` y todavía usa
-datos de demostración.
+auditoría de clientes), 6 paquetes PL/SQL `VALID` y catálogos v3 cargados. El panel PHP/AdminLTE
+está en `web/`: el acceso de personal ya consulta Oracle, los flujos operativos siguen con datos
+de demostración y faltan los reportes.
+
+- [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
+- [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
 
 ---
 
@@ -23,6 +26,7 @@ datos de demostración.
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
 | `material/` | Enunciados del ramo, plantillas y documentos de entrega |
 | `infra/` | Instalación del servidor (Apache, PHP, Oracle) e inventario de lo instalado |
+| `web/` | Panel PHP, JavaScript por página, componentes y datos de demostración |
 | `CODEGO/` | Bitácora y reportes fechados del avance |
 
 ## La base, en orden
@@ -72,5 +76,5 @@ documento en el mismo commit.
 
 1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo.
 2. `08_pruebas_v3.sql` con la batería completa.
-3. Web de administración (PHP + AdminLTE).
+3. Conectar la operación del panel a PHP y Oracle, incluida la recuperación de contraseña.
 4. Definir quién hace las pantallas del cliente final.
