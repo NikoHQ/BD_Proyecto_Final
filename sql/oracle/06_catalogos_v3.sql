@@ -21,8 +21,9 @@
 -- con ID explicito no consume la secuencia y el siguiente insert automatico
 -- chocaria con la PK.
 --
--- Credenciales demo: clave Demo1234 para ADMIN y OPERADOR. El hash es bcrypt
--- y esta verificado; las cuentas de personal nacen verificadas.
+-- Credenciales demo, solo para laboratorio: ADMIN/admin y OPERADOR/Demo1234.
+-- Los dos hashes son bcrypt y estan verificados; las cuentas de personal
+-- nacen verificadas. No reutilizar estas claves fuera de este equipo.
 -- =====================================================================
 
 SET SERVEROUTPUT ON
@@ -274,13 +275,13 @@ INSERT INTO SGCD_ADMINISTRADORES (ID_ADMINISTRADOR, NOMBRE_ADMINISTRADOR)
 VALUES (2, 'Diego Aravena Munoz');
 
 -- ---------------------------------------------------------------------
--- 11. CREDENCIALES DE PERSONAL (acceso demo, clave Demo1234)
+-- 11. CREDENCIALES DE PERSONAL (laboratorio: ADMIN/admin, OPERADOR/Demo1234)
 --     El personal nace verificado; el verificador es el propio administrador.
 -- ---------------------------------------------------------------------
 INSERT INTO SGCD_CREDENCIALES (ID_CREDENCIAL, LOGIN_CREDENCIAL, CLAVE_HASH_CREDENCIAL,
     ROL_CREDENCIAL, ESTADO_CREDENCIAL, ID_CLIENTE, ID_ADMINISTRADOR,
     FECHA_VERIFICACION_CREDENCIAL, ID_ADMINISTRADOR_VERIFICADOR)
-VALUES (1, 'ADMIN', '$2y$12$K9jB5X2EHPjF9LC1fTdJdOc3SMHziE1S4gN.9hYEEn3ffnBDhzLpG',
+VALUES (1, 'ADMIN', '$2y$12$MpPV8fTOj3Bjs9KcaNLDKOiM6WVMH1ZcnhHEAdEVjQq3fLt6wPF6y',
     'ADMINISTRADOR', 'ACTIVA', NULL, 1, SYSTIMESTAMP, 1);
 
 INSERT INTO SGCD_CREDENCIALES (ID_CREDENCIAL, LOGIN_CREDENCIAL, CLAVE_HASH_CREDENCIAL,

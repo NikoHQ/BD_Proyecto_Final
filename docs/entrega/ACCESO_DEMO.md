@@ -26,14 +26,16 @@ EXIT
 
 ## Iniciar sesión
 
-Abre [el panel local](http://localhost:8080/).
+Abre el panel en la URL del servidor de desarrollo. Mientras no esté desplegado en Apache, el
+servidor embebido de PHP lo sirve en `http://127.0.0.1:8090/` con las variables `SGCD_DB_*` en el
+entorno.
 
 | Usuario de prueba | Clave inicial | Permite probar |
 | --- | --- | --- |
-| `ADMIN` | `Demo1234` | Perfil, gestión de personal y edición o anulación de pagos en la maqueta. |
+| `ADMIN` | `admin` | Perfil, gestión de personal y edición o anulación de pagos en la maqueta. |
 | `OPERADOR` | `Demo1234` | Perfil y pantallas operativas con las restricciones del rol. |
 
-Son credenciales de desarrollo sembradas por los catálogos v3. Si alguien cambió la clave en ese mismo Oracle, usa la clave vigente. Un administrador puede restablecer la de otro usuario desde **Usuarios del personal**. La recuperación con preguntas es tarea de backend y en la demo aparece como pendiente.
+Son credenciales **de laboratorio** sembradas por los catálogos v3; no reutilizarlas fuera de este equipo. El cambio de contraseña desde la interfaz exige 12 caracteres, pero el login acepta la clave vigente sin ese mínimo. Si alguien cambió la clave en ese mismo Oracle, usa la que esté guardada. Un administrador puede restablecer la de otro usuario desde **Usuarios del personal**. La recuperación con preguntas es tarea de backend y en la demo aparece como pendiente.
 
 En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar sesión**. El login, la gestión de personal y la consulta Oracle de catálogos requieren la base. Agenda, reservas, clientes, pagos, recintos editables, tarifas y torneos usan ejemplos locales guardados en el navegador. Si quieres una demostración limpia, usa un perfil de navegador separado. Usa sólo datos ficticios.
 
