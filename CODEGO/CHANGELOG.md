@@ -343,3 +343,49 @@ bajar: tras llegar a 3, un `RESTART START WITH 1` devuelve 1. Por eso el script 
 **Idempotencia comprobada.** El script se ejecutó tres veces seguidas; el estado final siempre fue
 el mismo y las secuencias siguieron por delante del máximo.
 
+
+---
+
+## 2026-11-20 — Aporte de clientes integrado (tabla 23, CRUD y auditoría)
+
+**Contexto.** Ignacio entregó `mi_parte_plsql/` con actualizar/borrar ficha, una tabla de
+auditoría y tres reportes. Se revisó contra el modelo v3 y se integró en las rutas canónicas.
+Decisiones y contrato completo en
+[`docs/diseno/2026-11-20-integracion-aporte-clientes.md`](../docs/diseno/2026-11-20-integracion-aporte-clientes.md).
+
+**Archivos tocados**
+
+| Ruta | Cambio |
+|---|---|
+| `sql/oracle/04_ddl_v3.sql` | Tabla 23 `SGCD_AUDITORIA_CLIENTES` + secuencia + índice + `TRG_SGCD_CLIENTES_AU/AD` + `BI` de la auditoría. El DDL pasa de 22 a 23 tablas y de 19 a 20 pares secuencia/trigger |
+| `sql/oracle/05_paquetes_plsql.sql` | `SGCD_PKG_CLIENTES`: `actualizar_ficha`, `cambiar_estado`, `borrar_ficha`. `SGCD_PKG_CONSULTAS`: `reporte_ingresos`, `reporte_reservas_cancha`, `reporte_clientes_reservas`. Errores nuevos `-20024..-20026` |
+| `sql/oracle/08_pruebas_v3.sql` | Nuevo. Secciones: ficha + auditoría, errores esperados y reportes |
+| `README.md` | Estado, 23 tablas y estado de cada script |
+
+**Resultado verificado**
+
+```
+SGCD       TABLAS 23 · SECUENCIAS 20 · TRIGGERS 22 · INDICES 24 · CHECK 62 · FK 29 · UNIQUE 16
+           PAQUETES 6 (12 objetos VALID) · INVALIDOS 0
+PRUEBAS    9 OK (1.1 a 1.7, 3.1, 3.2) · 0 fallos
+REBUILD    esquema desechable SGCD_DRY: 04 -> 05 -> 06 = 23 tablas, 80 tarifas, 2 credenciales, 0 inválidos; usuario eliminado después
+```
+
+**Decisiones que evitan trampas**
+
+1. La auditoría vive dentro de `04_ddl_v3.sql` porque su limpieza borra tablas `SGCD_*` y
+   secuencias `SGCD_SEQ_*`: en un archivo aparte, una re-ejecución del DDL la dejaría huérfana.
+2. Los procedimientos entran al paquete: la rúbrica exige la lógica en la capa de servicios y el
+   catálogo de errores ya tenía `-20002` y `-20017` para los mismos casos.
+3. `crear_ficha` ahora responde `-20025` cuando falta el nombre (antes `-20002`).
+4. El operador de la auditoría llega por `CLIENT_IDENTIFIER`; si PHP no lo fija, la columna queda
+   nula y nada más cambia.
+5. `borrar_ficha` conserva su conteo de las 7 FK, pero además traduce `ORA-02292` a `-20026` para
+   la carrera entre el conteo y el `DELETE`.
+
+**No ejecutado a propósito**
+
+- No se re-ejecutó `04_ddl_v3.sql` sobre `SGCD`: se aplicaron sólo los objetos nuevos, para no
+  borrar catálogos ni credenciales. La re-ejecución completa se validó en `SGCD_DRY`.
+- `mi_parte_plsql/` se deja intacto como referencia del aporte; sus pruebas apuntan a los
+  procedimientos sueltos y a los códigos `-201xx`, que ya no existen.

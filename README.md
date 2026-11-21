@@ -4,8 +4,10 @@ Proyecto de **INF324 / ES3**. Motor de base de datos Oracle 26ai Free en Docker,
 en PL/SQL y una web de administración en PHP (pendiente).
 **Entrega:** 2026-11-27.
 
-**Estado hoy:** esquema v3 definido y compilado (22 tablas). Sin PL/SQL escrito, sin capa web.
-La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
+**Estado hoy (2026-11-20):** esquema v3 compilado en `SGCD` con **23 tablas** (incluye la
+auditoría de clientes), 6 paquetes PL/SQL `VALID` y catálogos v3 cargados. Sin capa web en la
+raíz del repo; el panel PHP/AdminLTE llega en la rama `codex/frontend-admin-demo` y todavía usa
+datos de demostración.
 
 ---
 
@@ -30,11 +32,11 @@ La base real sigue con la v2 de 17 tablas hasta que se ejecute la migración.
 | `sql/oracle/01_ddl_v2.sql` | Esquema v2: 17 tablas | histórico |
 | `sql/oracle/02_pruebas_v2.sql` | 26 pruebas de integridad de la v2 | histórico |
 | `sql/oracle/03_catalogos_v2.sql` | Catálogos de la v2 (2 recintos, 78 tarifas) | histórico |
-| `sql/oracle/04_ddl_v3.sql` | **Esquema v3: 22 tablas** (cliente web, credenciales, torneos) | compilado |
-| `sql/oracle/05_paquetes_plsql.sql` | **6 paquetes de lógica de negocio** (compilado: 12 objetos VALID) | compilado |
+| `sql/oracle/04_ddl_v3.sql` | **Esquema v3: 23 tablas** (cliente web, credenciales, torneos, auditoría) | compilado |
+| `sql/oracle/05_paquetes_plsql.sql` | **6 paquetes de lógica de negocio** (12 objetos VALID), con el CRUD de la ficha y los 3 reportes | compilado |
 | `sql/oracle/06_catalogos_v3.sql` | Catálogos de la v3 (80 tarifas, 2 credenciales demo) | cargado |
 | `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
-| `sql/oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | pendiente |
+| `sql/oracle/08_pruebas_v3.sql` | Pruebas de la v3: ficha y auditoría de clientes, errores y reportes | parcial |
 
 Se ejecutan **en ese orden**, dentro del esquema `SGCD`. `04_ddl_v3.sql` es autocontenido:
 borra las tablas `SGCD_*` existentes antes de crearlas, así que reemplaza a la v2 sin pasos manuales.

@@ -1,6 +1,6 @@
 -- =====================================================================
 -- SISTEMA DE GESTION DE CENTROS DEPORTIVOS - SGCD
--- DDL Oracle 26ai Free - ESQUEMA v3 - 22 tablas
+-- DDL Oracle 26ai Free - ESQUEMA v3 - 23 tablas
 --
 -- Reemplaza a 01_ddl_v2.sql. Cambios estructurales:
 --   * CLIENTES gana RUT_CLIENTE + DV_CLIENTE (clave natural) y CORREO unico.
@@ -12,8 +12,11 @@
 --     de un torneo ES una reserva: un solo calendario.
 --   * El indice unico de bloque deja de incluir ID_MODALIDAD: el conflicto es
 --     por cancha. El solape parcial lo detecta SGCD_PKG_RESERVAS.
---   * Las llaves se generan con secuencia + trigger BEFORE INSERT (19 pares),
+--   * Las llaves se generan con secuencia + trigger BEFORE INSERT (20 pares),
 --     no con IDENTITY, para que el modelo muestre el mecanismo.
+--   * AUDITORIA_CLIENTES (nueva): historial de cambios y borrados de fichas,
+--     escrito por triggers AFTER. No lleva FK a CLIENTES para conservar las
+--     fichas borradas. Es la pieza de monitoreo de la rubrica.
 --
 -- Orden de ejecucion: 01..03 (v2) son historico. La v3 es:
 --   04_ddl_v3.sql -> 05_paquetes_plsql.sql -> 06_catalogos_v3.sql
@@ -554,6 +557,31 @@ CREATE TABLE SGCD_PAGOS (
 );
 
 
+-- ---------------------------------------------------------------------
+-- 23. SGCD_AUDITORIA_CLIENTES - historial de cambios y borrados de fichas
+--    La escribe TRG_SGCD_CLIENTES_AU/AD, no la aplicacion. Sin FK a CLIENTES:
+--    el registro sobrevive al borrado de la ficha. ID_ADMINISTRADOR es
+--    informativo y queda nulo si la sesion no lo declara.
+-- ---------------------------------------------------------------------
+CREATE TABLE SGCD_AUDITORIA_CLIENTES (
+    ID_AUDITORIA      NUMBER(10),
+    ID_CLIENTE        NUMBER(10) NOT NULL,
+    ACCION            VARCHAR2(10) NOT NULL,
+    FECHA_EVENTO      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    ID_ADMINISTRADOR  NUMBER(10),
+    NOMBRE_ANTERIOR   VARCHAR2(100),
+    NOMBRE_NUEVO      VARCHAR2(100),
+    TELEFONO_ANTERIOR VARCHAR2(20),
+    TELEFONO_NUEVO    VARCHAR2(20),
+    CORREO_ANTERIOR   VARCHAR2(150),
+    CORREO_NUEVO      VARCHAR2(150),
+    ESTADO_ANTERIOR   VARCHAR2(10),
+    ESTADO_NUEVO      VARCHAR2(10),
+    CONSTRAINT PK_SGCD_AUDITORIA_CLIENTES PRIMARY KEY (ID_AUDITORIA),
+    CONSTRAINT CK_SGCD_AUD_ACCION CHECK (ACCION IN ('INSERT', 'UPDATE', 'DELETE'))
+);
+
+
 -- =====================================================================
 -- Indices sobre claves foraneas (Oracle no indexa FK automaticamente)
 -- =====================================================================
@@ -572,6 +600,7 @@ CREATE INDEX IX_SGCD_DETIMP_ARTICULO      ON SGCD_DETALLES_IMPLEMENTOS (ID_ARTIC
 CREATE INDEX IX_SGCD_PAGOS_RESERVA        ON SGCD_PAGOS (ID_RESERVA);
 CREATE INDEX IX_SGCD_PAGOS_OPERACION      ON SGCD_PAGOS (ID_OPERACION);
 CREATE INDEX IX_SGCD_PAGOS_MEMBRESIA      ON SGCD_PAGOS (ID_MEMBRESIA);
+CREATE INDEX IX_SGCD_AUDCLI_CLIENTE       ON SGCD_AUDITORIA_CLIENTES (ID_CLIENTE, FECHA_EVENTO);
 CREATE INDEX IX_SGCD_CLIENTES_TELEFONO    ON SGCD_CLIENTES (TELEFONO_CLIENTE);
 CREATE INDEX IX_SGCD_TORNEOS_RECINTO      ON SGCD_TORNEOS (ID_RECINTO);
 CREATE INDEX IX_SGCD_TORNEOS_MODALIDAD    ON SGCD_TORNEOS (ID_MODALIDAD);
@@ -582,7 +611,7 @@ CREATE INDEX IX_SGCD_EQJUG_JUGADOR        ON SGCD_EQUIPO_JUGADORES (ID_JUGADOR);
 
 
 -- =====================================================================
--- SECUENCIAS Y TRIGGERS DE LLAVE (19 pares)
+-- SECUENCIAS Y TRIGGERS DE LLAVE (20 pares)
 -- Las 3 tablas con PK compuesta no llevan llave generada.
 -- NOCACHE minimiza huecos por reinicio; el hueco por rollback o por un
 -- INSERT rechazado es inherente a toda secuencia.
@@ -609,6 +638,7 @@ CREATE SEQUENCE SGCD_SEQ_EQUIPOS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
 CREATE SEQUENCE SGCD_SEQ_JUGADORES START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
 CREATE SEQUENCE SGCD_SEQ_OPERACIONES_IMPLEMENTOS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
 CREATE SEQUENCE SGCD_SEQ_PAGOS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SGCD_SEQ_AUDITORIA_CLIENTES START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
 
 CREATE OR REPLACE TRIGGER TRG_SGCD_RECINTOS_BI
 BEFORE INSERT ON SGCD_RECINTOS
@@ -797,6 +827,81 @@ BEGIN
     IF :NEW.ID_PAGO IS NULL THEN
         :NEW.ID_PAGO := SGCD_SEQ_PAGOS.NEXTVAL;
     END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER TRG_SGCD_AUDITORIA_CLIENTES_BI
+BEFORE INSERT ON SGCD_AUDITORIA_CLIENTES
+FOR EACH ROW
+BEGIN
+    IF :NEW.ID_AUDITORIA IS NULL THEN
+        :NEW.ID_AUDITORIA := SGCD_SEQ_AUDITORIA_CLIENTES.NEXTVAL;
+    END IF;
+END;
+/
+
+
+-- =====================================================================
+-- TRIGGERS DE MONITOREO - historial de la ficha del cliente
+-- AFTER UPDATE y AFTER DELETE: corren dentro de la misma transaccion, asi
+-- que un ROLLBACK revierte el cambio y su registro. No auditan INSERT: el
+-- alta ya queda fechada en CREADO_EN_CLIENTE.
+-- ID_ADMINISTRADOR sale de CLIENT_IDENTIFIER, que PHP fija al iniciar la
+-- sesion con DBMS_SESSION.SET_IDENTIFIER(<id>). Se valida como numero para
+-- que un identificador libre no rompa el UPDATE.
+-- =====================================================================
+
+CREATE OR REPLACE TRIGGER TRG_SGCD_CLIENTES_AU
+AFTER UPDATE ON SGCD_CLIENTES
+FOR EACH ROW
+DECLARE
+    v_admin NUMBER(10);
+BEGIN
+    IF (:OLD.NOMBRE_CLIENTE <> :NEW.NOMBRE_CLIENTE)
+    OR (:OLD.NOMBRE_CLIENTE IS NULL AND :NEW.NOMBRE_CLIENTE IS NOT NULL)
+    OR (:OLD.NOMBRE_CLIENTE IS NOT NULL AND :NEW.NOMBRE_CLIENTE IS NULL)
+    OR (:OLD.TELEFONO_CLIENTE <> :NEW.TELEFONO_CLIENTE)
+    OR (:OLD.TELEFONO_CLIENTE IS NULL AND :NEW.TELEFONO_CLIENTE IS NOT NULL)
+    OR (:OLD.TELEFONO_CLIENTE IS NOT NULL AND :NEW.TELEFONO_CLIENTE IS NULL)
+    OR (:OLD.CORREO_CLIENTE <> :NEW.CORREO_CLIENTE)
+    OR (:OLD.CORREO_CLIENTE IS NULL AND :NEW.CORREO_CLIENTE IS NOT NULL)
+    OR (:OLD.CORREO_CLIENTE IS NOT NULL AND :NEW.CORREO_CLIENTE IS NULL)
+    OR (:OLD.ESTADO_CLIENTE <> :NEW.ESTADO_CLIENTE)
+    OR (:OLD.ESTADO_CLIENTE IS NULL AND :NEW.ESTADO_CLIENTE IS NOT NULL)
+    OR (:OLD.ESTADO_CLIENTE IS NOT NULL AND :NEW.ESTADO_CLIENTE IS NULL) THEN
+        IF REGEXP_LIKE(SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER'), '^[0-9]{1,10}$') THEN
+            v_admin := TO_NUMBER(SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER'));
+        END IF;
+        INSERT INTO SGCD_AUDITORIA_CLIENTES (
+            ID_CLIENTE, ACCION, FECHA_EVENTO, ID_ADMINISTRADOR,
+            NOMBRE_ANTERIOR, NOMBRE_NUEVO, TELEFONO_ANTERIOR, TELEFONO_NUEVO,
+            CORREO_ANTERIOR, CORREO_NUEVO, ESTADO_ANTERIOR, ESTADO_NUEVO)
+        VALUES (
+            :OLD.ID_CLIENTE, 'UPDATE', SYSTIMESTAMP, v_admin,
+            :OLD.NOMBRE_CLIENTE, :NEW.NOMBRE_CLIENTE,
+            :OLD.TELEFONO_CLIENTE, :NEW.TELEFONO_CLIENTE,
+            :OLD.CORREO_CLIENTE, :NEW.CORREO_CLIENTE,
+            :OLD.ESTADO_CLIENTE, :NEW.ESTADO_CLIENTE);
+    END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER TRG_SGCD_CLIENTES_AD
+AFTER DELETE ON SGCD_CLIENTES
+FOR EACH ROW
+DECLARE
+    v_admin NUMBER(10);
+BEGIN
+    IF REGEXP_LIKE(SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER'), '^[0-9]{1,10}$') THEN
+        v_admin := TO_NUMBER(SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER'));
+    END IF;
+    INSERT INTO SGCD_AUDITORIA_CLIENTES (
+        ID_CLIENTE, ACCION, FECHA_EVENTO, ID_ADMINISTRADOR,
+        NOMBRE_ANTERIOR, TELEFONO_ANTERIOR, CORREO_ANTERIOR, ESTADO_ANTERIOR)
+    VALUES (
+        :OLD.ID_CLIENTE, 'DELETE', SYSTIMESTAMP, v_admin,
+        :OLD.NOMBRE_CLIENTE, :OLD.TELEFONO_CLIENTE, :OLD.CORREO_CLIENTE,
+        :OLD.ESTADO_CLIENTE);
 END;
 /
 -- =====================================================================

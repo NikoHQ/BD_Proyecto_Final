@@ -37,6 +37,9 @@
 --   -20021 falta el cliente de la reserva
 --   -20022 el jugador ya esta en este equipo
 --   -20023 la cuenta ya estaba verificada
+--   -20024 ID de cliente invalido (nulo, no entero o fuera de rango)
+--   -20025 el nombre del cliente es obligatorio
+--   -20026 el cliente tiene registros relacionados: no se puede borrar
 --
 -- Sin lineas en blanco dentro de cada unidad: SQL*Plus con SQLBLANKLINES OFF
 -- corta la sentencia en la linea vacia.
@@ -63,6 +66,13 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_CLIENTES AS
         p_id_cliente OUT NUMBER,
         p_creada     OUT BOOLEAN);
     PROCEDURE buscar_ficha(p_texto VARCHAR2, p_cursor OUT SYS_REFCURSOR);
+    PROCEDURE actualizar_ficha(
+        p_id_cliente NUMBER,
+        p_nombre     VARCHAR2,
+        p_telefono   VARCHAR2 DEFAULT NULL,
+        p_correo     VARCHAR2 DEFAULT NULL);
+    PROCEDURE cambiar_estado(p_id_cliente NUMBER, p_estado VARCHAR2);
+    PROCEDURE borrar_ficha(p_id_cliente NUMBER);
 END SGCD_PKG_CLIENTES;
 /
 CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CLIENTES AS
@@ -111,7 +121,7 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CLIENTES AS
         v_existe NUMBER;
     BEGIN
         IF p_nombre IS NULL OR TRIM(p_nombre) IS NULL THEN
-            RAISE_APPLICATION_ERROR(-20002, 'El nombre del cliente es obligatorio');
+            RAISE_APPLICATION_ERROR(-20025, 'El nombre del cliente es obligatorio');
         END IF;
         IF NOT rut_valido(p_rut, v_dv) THEN
             RAISE_APPLICATION_ERROR(-20001, 'RUT invalido: ' || p_rut || '-' || v_dv);
@@ -142,6 +152,96 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CLIENTES AS
                OR  (TO_CHAR(c.RUT_CLIENTE) || c.DV_CLIENTE) LIKE '%' || UPPER(TRIM(p_texto)) || '%'
             ORDER BY c.NOMBRE_CLIENTE;
     END buscar_ficha;
+    -- Aporte de Ignacio (20-11-2026), integrado al paquete: CRUD de la ficha.
+    -- La tabla mantiene las validaciones de formato, largo y unicidad; estos
+    -- procedimientos solo agregan el mensaje propio. No hacen COMMIT: la
+    -- transaccion la cierra PHP.
+    PROCEDURE validar_id_cliente(p_id_cliente NUMBER) IS
+    BEGIN
+        IF p_id_cliente IS NULL OR p_id_cliente <= 0 OR p_id_cliente <> TRUNC(p_id_cliente) THEN
+            RAISE_APPLICATION_ERROR(-20024, 'El ID del cliente debe ser un entero mayor que cero');
+        END IF;
+    END validar_id_cliente;
+    PROCEDURE actualizar_ficha(
+        p_id_cliente NUMBER, p_nombre VARCHAR2,
+        p_telefono VARCHAR2 DEFAULT NULL, p_correo VARCHAR2 DEFAULT NULL) IS
+        v_cantidad NUMBER;
+    BEGIN
+        validar_id_cliente(p_id_cliente);
+        IF p_nombre IS NULL OR TRIM(p_nombre) IS NULL THEN
+            RAISE_APPLICATION_ERROR(-20025, 'El nombre del cliente es obligatorio');
+        END IF;
+        SELECT COUNT(*) INTO v_cantidad
+        FROM   SGCD_CLIENTES
+        WHERE  ID_CLIENTE = p_id_cliente;
+        IF v_cantidad = 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Cliente no encontrado');
+        END IF;
+        SELECT COUNT(*) INTO v_cantidad
+        FROM   SGCD_CLIENTES
+        WHERE  CORREO_CLIENTE = LOWER(TRIM(p_correo))
+          AND  ID_CLIENTE <> p_id_cliente;
+        IF v_cantidad > 0 THEN
+            RAISE_APPLICATION_ERROR(-20017, 'El correo ya esta registrado en otra ficha');
+        END IF;
+        -- ID, RUT, DV y estado se conservan: el RUT identifica, no se edita.
+        UPDATE SGCD_CLIENTES
+        SET    NOMBRE_CLIENTE   = TRIM(p_nombre),
+               TELEFONO_CLIENTE = TRIM(p_telefono),
+               CORREO_CLIENTE   = LOWER(TRIM(p_correo))
+        WHERE  ID_CLIENTE = p_id_cliente;
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Cliente no encontrado');
+        END IF;
+    EXCEPTION
+        WHEN DUP_VAL_ON_INDEX THEN
+            RAISE_APPLICATION_ERROR(-20017, 'El correo ya esta registrado en otra ficha');
+    END actualizar_ficha;
+    PROCEDURE cambiar_estado(p_id_cliente NUMBER, p_estado VARCHAR2) IS
+    BEGIN
+        validar_id_cliente(p_id_cliente);
+        IF p_estado IS NULL OR UPPER(TRIM(p_estado)) NOT IN ('ACTIVO', 'INACTIVO') THEN
+            RAISE_APPLICATION_ERROR(-20009, 'Estado de cliente invalido: use ACTIVO o INACTIVO');
+        END IF;
+        UPDATE SGCD_CLIENTES
+        SET    ESTADO_CLIENTE = UPPER(TRIM(p_estado))
+        WHERE  ID_CLIENTE = p_id_cliente;
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Cliente no encontrado');
+        END IF;
+    END cambiar_estado;
+    PROCEDURE borrar_ficha(p_id_cliente NUMBER) IS
+        v_relaciones NUMBER;
+    BEGIN
+        validar_id_cliente(p_id_cliente);
+        -- Las 7 claves foraneas que apuntan a CLIENTES. Oracle las revisa
+        -- igual; contarlas solo permite un mensaje propio antes del DELETE.
+        SELECT (SELECT COUNT(*) FROM SGCD_CREDENCIALES WHERE ID_CLIENTE = p_id_cliente)
+             + (SELECT COUNT(*) FROM SGCD_MEMBRESIAS WHERE ID_CLIENTE = p_id_cliente)
+             + (SELECT COUNT(*) FROM SGCD_MOVIMIENTOS_PUNTOS WHERE ID_CLIENTE = p_id_cliente)
+             + (SELECT COUNT(*) FROM SGCD_RESERVAS WHERE ID_CLIENTE = p_id_cliente)
+             + (SELECT COUNT(*) FROM SGCD_EQUIPOS WHERE ID_CLIENTE_RESPONSABLE = p_id_cliente)
+             + (SELECT COUNT(*) FROM SGCD_JUGADORES WHERE ID_CLIENTE = p_id_cliente)
+             + (SELECT COUNT(*) FROM SGCD_OPERACIONES_IMPLEMENTOS WHERE ID_CLIENTE = p_id_cliente)
+        INTO   v_relaciones
+        FROM   DUAL;
+        IF v_relaciones > 0 THEN
+            RAISE_APPLICATION_ERROR(-20026,
+                'El cliente tiene registros relacionados; no se puede borrar. Use INACTIVO');
+        END IF;
+        DELETE FROM SGCD_CLIENTES
+        WHERE  ID_CLIENTE = p_id_cliente;
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Cliente no encontrado');
+        END IF;
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = -2292 THEN
+                RAISE_APPLICATION_ERROR(-20026,
+                    'El cliente tiene registros relacionados; no se puede borrar. Use INACTIVO');
+            END IF;
+            RAISE;
+    END borrar_ficha;
 END SGCD_PKG_CLIENTES;
 /
 
@@ -693,6 +793,11 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_CONSULTAS AS
         p_reservas       OUT SYS_REFCURSOR,
         p_pagos          OUT SYS_REFCURSOR);
     FUNCTION estado_cuenta(p_id_credencial NUMBER) RETURN SYS_REFCURSOR;
+    -- Reportes de dashboard (aporte de Ignacio, 20-11-2026): ventana de p_dias
+    -- hacia atras, solo lectura, para conectar a la capa web.
+    FUNCTION reporte_ingresos(p_dias NUMBER DEFAULT 30) RETURN SYS_REFCURSOR;
+    FUNCTION reporte_reservas_cancha(p_dias NUMBER DEFAULT 30) RETURN SYS_REFCURSOR;
+    FUNCTION reporte_clientes_reservas(p_dias NUMBER DEFAULT 30) RETURN SYS_REFCURSOR;
 END SGCD_PKG_CONSULTAS;
 /
 CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CONSULTAS AS
@@ -743,5 +848,64 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CONSULTAS AS
             WHERE  c.ID_CLIENTE = v_cliente;
         RETURN v_cur;
     END estado_cuenta;
+    FUNCTION validar_dias(p_dias NUMBER) RETURN NUMBER IS
+    BEGIN
+        IF p_dias IS NULL OR p_dias < 1 OR p_dias <> TRUNC(p_dias) THEN
+            RAISE_APPLICATION_ERROR(-20019, 'El rango de dias debe ser un entero mayor que cero');
+        END IF;
+        RETURN p_dias;
+    END validar_dias;
+    FUNCTION reporte_ingresos(p_dias NUMBER DEFAULT 30) RETURN SYS_REFCURSOR IS
+        v_dias NUMBER := validar_dias(p_dias);
+        v_cur  SYS_REFCURSOR;
+    BEGIN
+        -- Total cobrado por dia y medio de pago. Incluye todo pago del periodo,
+        -- aunque su reserva se haya cancelado despues: el dinero si se cobro.
+        OPEN v_cur FOR
+            SELECT TO_CHAR(p.FECHA_PAGO, 'YYYY-MM-DD') AS DIA,
+                   p.MEDIO_PAGO,
+                   COUNT(*) AS CANTIDAD_PAGOS,
+                   SUM(p.IMPORTE_PAGO) AS TOTAL_COBRADO
+            FROM   SGCD_PAGOS p
+            WHERE  p.FECHA_PAGO >= SYSTIMESTAMP - NUMTODSINTERVAL(v_dias, 'DAY')
+              AND  p.FECHA_PAGO <  SYSTIMESTAMP
+            GROUP BY TO_CHAR(p.FECHA_PAGO, 'YYYY-MM-DD'), p.MEDIO_PAGO
+            ORDER BY DIA, p.MEDIO_PAGO;
+        RETURN v_cur;
+    END reporte_ingresos;
+    FUNCTION reporte_reservas_cancha(p_dias NUMBER DEFAULT 30) RETURN SYS_REFCURSOR IS
+        v_dias NUMBER := validar_dias(p_dias);
+        v_cur  SYS_REFCURSOR;
+    BEGIN
+        -- Reservas por cancha, sin canceladas. El JOIN deja fuera las canchas
+        -- sin movimientos: el dashboard muestra solo lo que se uso.
+        OPEN v_cur FOR
+            SELECT c.ID_CANCHA, c.NOMBRE_CANCHA, COUNT(r.ID_RESERVA) AS CANTIDAD_RESERVAS
+            FROM   SGCD_CANCHAS c
+            JOIN   SGCD_RESERVAS r ON r.ID_CANCHA = c.ID_CANCHA
+            WHERE  r.INICIO_RESERVA >= SYSTIMESTAMP - NUMTODSINTERVAL(v_dias, 'DAY')
+              AND  r.INICIO_RESERVA <  SYSTIMESTAMP
+              AND  r.ESTADO_RESERVA <> 'CANCELADA'
+            GROUP BY c.ID_CANCHA, c.NOMBRE_CANCHA
+            ORDER BY CANTIDAD_RESERVAS DESC, c.ID_CANCHA;
+        RETURN v_cur;
+    END reporte_reservas_cancha;
+    FUNCTION reporte_clientes_reservas(p_dias NUMBER DEFAULT 30) RETURN SYS_REFCURSOR IS
+        v_dias NUMBER := validar_dias(p_dias);
+        v_cur  SYS_REFCURSOR;
+    BEGIN
+        -- Clientes con mas reservas en el periodo, sin canceladas. Un bloque de
+        -- torneo no tiene ID_CLIENTE, asi que no compite en este ranking.
+        OPEN v_cur FOR
+            SELECT c.ID_CLIENTE, c.NOMBRE_CLIENTE, COUNT(r.ID_RESERVA) AS CANTIDAD_RESERVAS
+            FROM   SGCD_CLIENTES c
+            JOIN   SGCD_RESERVAS r ON r.ID_CLIENTE = c.ID_CLIENTE
+            WHERE  r.INICIO_RESERVA >= SYSTIMESTAMP - NUMTODSINTERVAL(v_dias, 'DAY')
+              AND  r.INICIO_RESERVA <  SYSTIMESTAMP
+              AND  r.ESTADO_RESERVA <> 'CANCELADA'
+            GROUP BY c.ID_CLIENTE, c.NOMBRE_CLIENTE
+            ORDER BY CANTIDAD_RESERVAS DESC, c.ID_CLIENTE;
+        RETURN v_cur;
+    END reporte_clientes_reservas;
 END SGCD_PKG_CONSULTAS;
 /
