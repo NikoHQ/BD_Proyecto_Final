@@ -23,9 +23,18 @@ grep -q '^env\[SGCD_DB_HOST\]' /etc/php/php-fpm.d/www.conf
 or printf 'env[SGCD_DB_HOST] = 127.0.0.1\nenv[SGCD_DB_PORT] = 1521\nenv[SGCD_DB_SERVICE] = FREEPDB1\nenv[SGCD_DB_USER] = SGCD\nenv[SGCD_DB_PASSWORD] = %s\n' "$SGCDPW" | sudo tee -a /etc/php/php-fpm.d/www.conf > /dev/null
 ```
 
-La clave queda solo en `/etc/php/php-fpm.d/www.conf` (root, fuera del repo). El `read -s` evita
-que aparezca en el historial de fish. El `grep` hace el paso repetible: si las variables ya están,
-no las duplica.
+`SGCDPW` es el **nombre de la variable**, no la clave: el `read` la captura sin mostrarla. La clave
+queda solo en `/etc/php/php-fpm.d/www.conf` (root, fuera del repo). El `grep` hace el paso
+repetible: si las variables ya están, no las duplica.
+
+Comprobar antes de seguir:
+
+```fish
+sudo grep SGCD_DB_PASSWORD /etc/php/php-fpm.d/www.conf
+```
+
+Tiene que mostrar **la clave**. Si muestra `SGCDPW`, la clave quedó vacía o se escribió el nombre
+de la variable: se corrige con la línea de la sección 4 y se reinicia `php-fpm`.
 
 ## 2. Copiar el panel
 
@@ -51,10 +60,17 @@ Debe responder `login 200`. Luego entra en <http://127.0.0.1/> con `ADMIN` / `ad
 
 | Síntoma | Revisar |
 | --- | --- |
-| `503 El acceso no está disponible` | Variables `SGCD_DB_*`: `sudo grep SGCD /etc/php/php-fpm.d/www.conf`, y que el contenedor esté `healthy` |
+| `503 El acceso no está disponible` con `Oracle no está disponible` en `error_log` | La clave del pool está mal o vacía: `sudo grep SGCD /etc/php/php-fpm.d/www.conf` y que el contenedor esté `healthy` |
 | El navegador descarga el `.php` | Falta el bloque `SetHandler` o no se reinició `httpd` |
 | `Permission denied` al leer archivos | `sudo chown -R http:http /srv/http` |
 | Página vieja tras editar | `rsync` no se ejecutó o Apache tiene caché: recarga con Ctrl+F5 |
+
+Corregir solo la clave, sin reescribir el resto:
+
+```fish
+sudo sed -i 's|^env\[SGCD_DB_PASSWORD\].*|env[SGCD_DB_PASSWORD] = TU_CLAVE|' /etc/php/php-fpm.d/www.conf
+sudo systemctl restart php-fpm
+```
 
 Para revertir el despliegue: `sudo rsync -a --delete web/ /srv/http/` desde otro commit, o vaciar
 `/srv/http`. Para quitar las variables: borrar las líneas `env[SGCD_DB_*]` de `www.conf` y
