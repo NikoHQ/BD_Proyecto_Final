@@ -33,3 +33,18 @@
 La opción **Borrar de la maqueta** existe únicamente para probar el prototipo. En producción se reemplaza por cancelación o anulación trazable; no debe eliminar una reserva físicamente desde el panel.
 
 PHP debe ejecutar todas las verificaciones y traducir los errores de Oracle en mensajes de interfaz. La maqueta sólo conserva sus cambios de reserva y pago en el navegador hasta que se recarga.
+
+## Prioridad entre reservas en conflicto
+
+Cuando dos reservas se solapan en la misma cancha, el panel debe mostrar de cada una su
+`CREADO_EN_RESERVA` para que el operador vea **quién reservó primero**. Criterio: la más antigua
+tiene prioridad; el desempate final es humano. No requiere cambios de esquema: la columna ya
+existe y se llena con `SYSTIMESTAMP` en el alta.
+
+La consulta de agenda y el listado de reservas deben devolver `CREADO_EN_RESERVA`, ordenar por
+`INICIO_RESERVA` y desempatar por esa fecha. En la ficha de la reserva conviene mostrarla junto al
+estado del pago.
+
+Recordar que `UX_SGCD_RESERVAS_BLOQUE` solo impide repetir el par `(ID_CANCHA, INICIO_RESERVA)`
+exacto: los solapes parciales los detecta `SGCD_PKG_RESERVAS.hay_conflicto`, y una carrera entre
+dos sesiones puede dejar dos filas solapadas. Ese es justamente el caso que este dato resuelve.

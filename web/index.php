@@ -11,6 +11,7 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="<?= esc(csrfToken()) ?>">
   <title>SGCD · Administración</title>
   <?php require __DIR__ . '/includes/styles.php'; ?>
   <link rel="stylesheet" href="assets/css/agenda.css">

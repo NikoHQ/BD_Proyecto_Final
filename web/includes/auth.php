@@ -116,10 +116,15 @@ function esc(?string $value): string
     return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-function csrfField(): string
+function csrfToken(): string
 {
     $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
-    return '<input type="hidden" name="csrf" value="' . esc($_SESSION['csrf']) . '">';
+    return $_SESSION['csrf'];
+}
+
+function csrfField(): string
+{
+    return '<input type="hidden" name="csrf" value="' . esc(csrfToken()) . '">';
 }
 
 function post(string $name): string

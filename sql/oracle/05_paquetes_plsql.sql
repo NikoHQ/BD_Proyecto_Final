@@ -40,6 +40,7 @@
 --   -20024 ID de cliente invalido (nulo, no entero o fuera de rango)
 --   -20025 el nombre del cliente es obligatorio
 --   -20026 el cliente tiene registros relacionados: no se puede borrar
+--   -20027 filtro o paginacion invalidos (estado, pagina, tamano)
 --
 -- Sin lineas en blanco dentro de cada unidad: SQL*Plus con SQLBLANKLINES OFF
 -- corta la sentencia en la linea vacia.
@@ -73,6 +74,14 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_CLIENTES AS
         p_correo     VARCHAR2 DEFAULT NULL);
     PROCEDURE cambiar_estado(p_id_cliente NUMBER, p_estado VARCHAR2);
     PROCEDURE borrar_ficha(p_id_cliente NUMBER);
+    PROCEDURE listar_fichas(
+        p_texto   VARCHAR2 DEFAULT NULL,
+        p_estado  VARCHAR2 DEFAULT NULL,
+        p_desde   NUMBER DEFAULT 1,
+        p_tamano  NUMBER DEFAULT 20,
+        p_cursor  OUT SYS_REFCURSOR,
+        p_total   OUT NUMBER);
+    FUNCTION ficha_detalle(p_id_cliente NUMBER) RETURN SYS_REFCURSOR;
 END SGCD_PKG_CLIENTES;
 /
 CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CLIENTES AS
@@ -242,6 +251,84 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CLIENTES AS
             END IF;
             RAISE;
     END borrar_ficha;
+    PROCEDURE listar_fichas(
+        p_texto VARCHAR2 DEFAULT NULL, p_estado VARCHAR2 DEFAULT NULL,
+        p_desde NUMBER DEFAULT 1, p_tamano NUMBER DEFAULT 20,
+        p_cursor OUT SYS_REFCURSOR, p_total OUT NUMBER) IS
+        v_texto  VARCHAR2(150) := UPPER(TRIM(p_texto));
+        v_rut    VARCHAR2(12)  := REPLACE(REPLACE(UPPER(TRIM(p_texto)), '.', ''), '-', '');
+        v_estado VARCHAR2(10)  := UPPER(TRIM(p_estado));
+        v_desde  NUMBER := NVL(p_desde, 1);
+        v_tamano NUMBER := NVL(p_tamano, 20);
+    BEGIN
+        IF v_estado IS NOT NULL AND v_estado NOT IN ('ACTIVO', 'INACTIVO') THEN
+            RAISE_APPLICATION_ERROR(-20027, 'Filtro de estado invalido: use ACTIVO o INACTIVO');
+        END IF;
+        IF v_desde < 1 OR v_tamano < 1 OR v_tamano > 100 THEN
+            RAISE_APPLICATION_ERROR(-20027, 'Pagina desde 1 y tamano entre 1 y 100');
+        END IF;
+        -- El mismo filtro alimenta el total y la pagina. El RUT se compara sin
+        -- puntos ni guion, para que "12.345.678-5" tambien encuentre la ficha.
+        SELECT COUNT(*) INTO p_total
+        FROM   SGCD_CLIENTES c
+        WHERE  (v_texto IS NULL
+                OR UPPER(c.NOMBRE_CLIENTE) LIKE '%' || v_texto || '%'
+                OR (TO_CHAR(c.RUT_CLIENTE) || c.DV_CLIENTE) LIKE '%' || v_rut || '%'
+                OR c.TELEFONO_CLIENTE LIKE '%' || v_texto || '%'
+                OR LOWER(c.CORREO_CLIENTE) LIKE '%' || LOWER(v_texto) || '%')
+          AND  (v_estado IS NULL OR c.ESTADO_CLIENTE = v_estado);
+        OPEN p_cursor FOR
+            SELECT c.ID_CLIENTE, c.RUT_CLIENTE, c.DV_CLIENTE, c.NOMBRE_CLIENTE,
+                   c.TELEFONO_CLIENTE, c.CORREO_CLIENTE, c.ESTADO_CLIENTE,
+                   TO_CHAR(c.CREADO_EN_CLIENTE, 'YYYY-MM-DD HH24:MI:SS') AS CREADO_EN_CLIENTE
+            FROM   SGCD_CLIENTES c
+            WHERE  (v_texto IS NULL
+                    OR UPPER(c.NOMBRE_CLIENTE) LIKE '%' || v_texto || '%'
+                    OR (TO_CHAR(c.RUT_CLIENTE) || c.DV_CLIENTE) LIKE '%' || v_rut || '%'
+                    OR c.TELEFONO_CLIENTE LIKE '%' || v_texto || '%'
+                    OR LOWER(c.CORREO_CLIENTE) LIKE '%' || LOWER(v_texto) || '%')
+              AND  (v_estado IS NULL OR c.ESTADO_CLIENTE = v_estado)
+            ORDER BY c.NOMBRE_CLIENTE, c.ID_CLIENTE
+            OFFSET v_desde - 1 ROWS FETCH NEXT v_tamano ROWS ONLY;
+    END listar_fichas;
+    FUNCTION ficha_detalle(p_id_cliente NUMBER) RETURN SYS_REFCURSOR IS
+        v_cur      SYS_REFCURSOR;
+        v_cantidad NUMBER;
+    BEGIN
+        validar_id_cliente(p_id_cliente);
+        SELECT COUNT(*) INTO v_cantidad
+        FROM   SGCD_CLIENTES
+        WHERE  ID_CLIENTE = p_id_cliente;
+        IF v_cantidad = 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Cliente no encontrado');
+        END IF;
+        -- La ficha con lo que el panel muestra: reservas, dinero y cuenta web.
+        OPEN v_cur FOR
+            SELECT c.ID_CLIENTE, c.RUT_CLIENTE, c.DV_CLIENTE, c.NOMBRE_CLIENTE,
+                   c.TELEFONO_CLIENTE, c.CORREO_CLIENTE, c.ESTADO_CLIENTE,
+                   TO_CHAR(c.CREADO_EN_CLIENTE, 'YYYY-MM-DD HH24:MI:SS') AS CREADO_EN_CLIENTE,
+                   (SELECT COUNT(*) FROM SGCD_RESERVAS r
+                    WHERE r.ID_CLIENTE = c.ID_CLIENTE) AS RESERVAS,
+                   (SELECT COUNT(*) FROM SGCD_RESERVAS r
+                    WHERE r.ID_CLIENTE = c.ID_CLIENTE
+                      AND r.ESTADO_RESERVA <> 'CANCELADA') AS RESERVAS_VIGENTES,
+                   NVL((SELECT SUM(p.IMPORTE_PAGO) FROM SGCD_PAGOS p
+                        WHERE p.ID_RESERVA IN (SELECT r.ID_RESERVA FROM SGCD_RESERVAS r
+                                               WHERE r.ID_CLIENTE = c.ID_CLIENTE)
+                           OR p.ID_MEMBRESIA IN (SELECT m.ID_MEMBRESIA FROM SGCD_MEMBRESIAS m
+                                                 WHERE m.ID_CLIENTE = c.ID_CLIENTE)
+                           OR p.ID_OPERACION IN (SELECT o.ID_OPERACION
+                                                 FROM SGCD_OPERACIONES_IMPLEMENTOS o
+                                                 WHERE o.ID_CLIENTE = c.ID_CLIENTE)), 0)
+                       AS IMPORTE_PAGADO,
+                   (SELECT COUNT(*) FROM SGCD_CREDENCIALES cr
+                    WHERE cr.ID_CLIENTE = c.ID_CLIENTE) AS CUENTA_WEB,
+                   (SELECT COUNT(*) FROM SGCD_AUDITORIA_CLIENTES a
+                    WHERE a.ID_CLIENTE = c.ID_CLIENTE) AS EVENTOS
+            FROM   SGCD_CLIENTES c
+            WHERE  c.ID_CLIENTE = p_id_cliente;
+        RETURN v_cur;
+    END ficha_detalle;
 END SGCD_PKG_CLIENTES;
 /
 

@@ -389,3 +389,37 @@ REBUILD    esquema desechable SGCD_DRY: 04 -> 05 -> 06 = 23 tablas, 80 tarifas, 
   borrar catálogos ni credenciales. La re-ejecución completa se validó en `SGCD_DRY`.
 - `mi_parte_plsql/` se deja intacto como referencia del aporte; sus pruebas apuntan a los
   procedimientos sueltos y a los códigos `-201xx`, que ya no existen.
+
+---
+
+## 2026-11-20 (2) — API de clientes y despliegue nativo
+
+**Contexto.** Paso 2 de la integración del panel: la página de clientes deja de escribir en
+`localStorage` y pasa a invocar `SGCD_PKG_CLIENTES`. Se descarta `compose.yaml` (levantaba un
+segundo Oracle en 1521) y se documenta el despliegue sobre el Apache + PHP-FPM ya instalado.
+
+**Archivos**
+
+| Ruta | Cambio |
+|---|---|
+| `web/includes/api.php` | Nuevo. Sesión, CSRF por cabecera, lectura JSON/formulario, `apiLlamar` (binds + cursor + commit), mapa de errores Oracle → HTTP |
+| `web/api/clientes.php` | Nuevo. `listar`, `ver`, `crear`, `actualizar`, `estado`, `borrar` |
+| `web/includes/auth.php` | `csrfToken()` extraído de `csrfField()` |
+| `web/index.php` | `<meta name="csrf-token">` para el JavaScript |
+| `sql/oracle/05_paquetes_plsql.sql` | `listar_fichas` (filtros, paginación, total) y `ficha_detalle` (contadores) en `SGCD_PKG_CLIENTES`; error `-20027` |
+| `infra/DESPLIEGUE_WEB.md` | Nuevo. Comandos en fish: variables en `www.conf`, `rsync` a `/srv/http`, reinicio y diagnóstico |
+| `docs/diseno/2026-11-20-api-clientes.md` | Nuevo. Contrato, errores y trampas de OCI8 |
+| `docs/entrega/ACCESO_DEMO.md` | Arranque sin compose; crédito `ADMIN/admin` |
+| `compose.yaml`, `.env.example` | Eliminados |
+
+**Verificado**
+
+```
+17 casos curl: 200/201/400/401/403/404/405/409 en el código esperado
+SGCD: 0 clientes y 0 auditoría tras limpiar los datos de prueba · 3 credenciales (ADMIN, OPERADOR, NAIKO)
+05: 6 paquetes VALID, 0 inválidos
+```
+
+**Trampas resueltas** (detalle en `docs/diseno/2026-11-20-api-clientes.md`): buffer de 1 byte en
+OUT NUMBER (`ORA-06502`), `BOOLEAN` no bindeable, OUT que no vuelve por referencia, cursor
+`SQLT_RSET`, sesión ausente en el endpoint y OPcache del servidor embebido.

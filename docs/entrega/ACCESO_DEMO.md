@@ -2,26 +2,27 @@
 
 ## Levantar el entorno
 
-Ejecuta estos pasos desde la raíz del repositorio con Docker y Docker Compose.
+El panel se sirve con el Apache + PHP-FPM nativo ya instalado en la torre, sobre el contenedor
+`oracle-free` de siempre. No hay un segundo Oracle.
 
-1. Crea `.env` a partir de `.env.example`. Define contraseñas locales para Oracle y para el usuario del esquema `SGCD`. Conserva tu `.env` si ya existe.
-2. Ejecuta `docker compose up -d` y comprueba con `docker compose ps` que Oracle esté saludable.
-3. Si el volumen Oracle es nuevo, copia y carga el esquema v3, sus paquetes y los catálogos. El DDL reconstruye tablas SGCD. Ejecútalo sólo sobre una base de desarrollo recién creada. Si ya tienes v3 inicializada, continúa directamente al login.
+1. Arranca la base: `docker start oracle-free` y espera a que `docker ps` diga `healthy`.
+2. Comprueba los servicios: `systemctl is-active httpd php-fpm`.
+3. Despliega el panel: copia `web/` en `/srv/http` y recarga `php-fpm`. Los comandos exactos están
+   en [`infra/DESPLIEGUE_WEB.md`](../../infra/DESPLIEGUE_WEB.md).
 
-```sh
-docker compose cp sql/oracle/04_ddl_v3.sql oracle:/tmp/04_ddl_v3.sql
-docker compose cp sql/oracle/05_paquetes_plsql.sql oracle:/tmp/05_paquetes_plsql.sql
-docker compose cp sql/oracle/06_catalogos_v3.sql oracle:/tmp/06_catalogos_v3.sql
-docker compose exec oracle sqlplus SGCD@localhost/FREEPDB1
-```
-
-SQL*Plus pide la contraseña `SGCD_DB_PASSWORD` del `.env`. En el prompt de SQL*Plus, ejecuta:
+Si la base está vacía, carga el esquema antes de entrar:
 
 ```sql
-@/tmp/04_ddl_v3.sql
-@/tmp/05_paquetes_plsql.sql
-@/tmp/06_catalogos_v3.sql
-EXIT
+@sql/oracle/04_ddl_v3.sql
+@sql/oracle/05_paquetes_plsql.sql
+@sql/oracle/06_catalogos_v3.sql
+```
+
+`04_ddl_v3.sql` borra y recrea todas las tablas `SGCD_*`; ejecútalo sólo en una base de
+desarrollo. En SQL*Plus, dentro del contenedor:
+
+```sh
+docker exec -i oracle-free sqlplus sgcd@localhost/FREEPDB1 < sql/oracle/04_ddl_v3.sql
 ```
 
 ## Iniciar sesión
