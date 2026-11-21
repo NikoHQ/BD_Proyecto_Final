@@ -74,7 +74,11 @@ documento en el mismo commit.
 
 ## Qué falta
 
-1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo.
-2. `08_pruebas_v3.sql` con la batería completa.
-3. Conectar la operación del panel a PHP y Oracle, incluida la recuperación de contraseña.
-4. Definir quién hace las pantallas del cliente final.
+1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo. Sin datos, los dashboards y el video salen vacíos.
+2. `08_pruebas_v3.sql` completo — hoy cubre clientes, auditoría y reportes; faltan reservas, pagos, torneos y auth.
+3. Conectar `assets/js/pages/clientes.js` a `api/clientes.php` y quitar «Modo demostración» de esa vista. El backend ya está probado.
+4. Página **Reportes** con los tres dashboards: las funciones de `SGCD_PKG_CONSULTAS` ya devuelven cursor.
+5. Integrar agenda, reservas, pagos y torneos contra los paquetes (`SGCD_PKG_RESERVAS`, `SGCD_PKG_TORNEOS`).
+6. Recuperación de contraseña por preguntas de seguridad.
+7. Mostrar `CREADO_EN_RESERVA` cuando dos reservas chocan, para que el operador vea quién reservó primero.
+8. Definir quién hace las pantallas del cliente final.

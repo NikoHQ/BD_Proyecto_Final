@@ -423,3 +423,32 @@ SGCD: 0 clientes y 0 auditoría tras limpiar los datos de prueba · 3 credencial
 **Trampas resueltas** (detalle en `docs/diseno/2026-11-20-api-clientes.md`): buffer de 1 byte en
 OUT NUMBER (`ORA-06502`), `BOOLEAN` no bindeable, OUT que no vuelve por referencia, cursor
 `SQLT_RSET`, sesión ausente en el endpoint y OPcache del servidor embebido.
+
+---
+
+## 2026-11-20 — Cierre de jornada
+
+**Estado.** Esquema v3 con 23 tablas y 6 paquetes `VALID` (0 inválidos), catálogos cargados,
+panel desplegado en `/srv/http` sobre Apache + PHP-FPM nativo y login contra Oracle funcionando.
+`web/` y `/srv/http` son idénticos; `main` en GitHub al día.
+
+**Lo que quedó operativo**
+
+- CRUD de clientes completo en `SGCD_PKG_CLIENTES` + `api/clientes.php`, con permisos por perfil,
+  CSRF, auditoría atribuida al operador y 17 casos curl verificados.
+- Tabla 23 `SGCD_AUDITORIA_CLIENTES` con sus triggers de monitoreo.
+- Tres reportes como funciones de cursor, listos para conectar.
+- Despliegue documentado en `infra/DESPLIEGUE_WEB.md`; `compose.yaml` descartado.
+
+**Pendientes al cierre** (detalle en `README.md`)
+
+1. `07_datos_operativos.sql`.
+2. Resto de `08_pruebas_v3.sql` (reservas, pagos, torneos, auth).
+3. Conectar `clientes.js` a la API y quitar el modo demostración de esa vista.
+4. Página de Reportes.
+5. Agenda, reservas, pagos y torneos contra los paquetes.
+6. Recuperación por preguntas.
+7. Mostrar `CREADO_EN_RESERVA` en los choques de horario.
+
+**Base al cierre:** 0 clientes, 0 reservas, 0 pagos, 0 filas de auditoría; 80 tarifas, 3
+administradores y 3 credenciales (`ADMIN`, `OPERADOR`, `NAIKO`).
