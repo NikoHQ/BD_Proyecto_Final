@@ -36,15 +36,32 @@ function portalInbox(?callable $update = null): array
     }
 }
 
-function publishPortalRequest(array $booking, string $customer): void
+function recordPortalRequest(array &$requests, array $booking, string $customer): bool
 {
     $key = $booking['request'];
-    portalInbox(static function (array &$requests) use ($key, $booking, $customer): bool {
-        if (isset($requests[$key])) return false;
-        $requests[$key] = array_intersect_key($booking, array_flip(['code', 'courtName', 'site', 'mode', 'date', 'start', 'end', 'status']))
-            + ['customer' => $customer, 'confirmed' => false];
-        return true;
+    if (isset($requests[$key])) return false;
+    $fields = ['code', 'court', 'courtName', 'site', 'mode', 'date', 'start', 'end', 'status', 'total'];
+    $requests[$key] = array_intersect_key($booking, array_flip($fields)) + ['customer' => $customer];
+    return true;
+}
+
+function publishPortalRequest(array $booking, string $customer): void
+{
+    portalInbox(static function (array &$requests) use ($booking, $customer): bool {
+        return recordPortalRequest($requests, $booking, $customer);
     });
+}
+
+function submitPortalRequest(DemoPortal $portal, string $user, string $customer, array $filter, array $selection, string $key): array
+{
+    $result = [];
+    portalInbox(static function (array &$requests) use ($portal, $user, $customer, $filter, $selection, $key, &$result): bool {
+        $portal->syncRequestReviews($requests);
+        $portal->useRequestBlocks($requests);
+        $result = $portal->create($user, $filter, $selection, $key);
+        return isset($result['booking']) && recordPortalRequest($requests, $result['booking'], $customer);
+    });
+    return $result;
 }
 
 function reviewPortalRequest(string $key, string $status, bool $pendingOnly = true): bool
@@ -54,7 +71,6 @@ function reviewPortalRequest(string $key, string $status, bool $pendingOnly = tr
         $current = $requests[$key]['status'] ?? null;
         if ($current !== 'PENDIENTE' && ($pendingOnly || $current !== 'CONFIRMADA')) return false;
         $requests[$key]['status'] = $status;
-        if ($status === 'CONFIRMADA') $requests[$key]['confirmed'] = true;
         return $changed = true;
     });
     return $changed;

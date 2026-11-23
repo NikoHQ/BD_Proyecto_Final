@@ -52,11 +52,13 @@ function tournamentDraftInputs(array $draft): array
     $names = is_array($_POST['player_name'] ?? null) ? $_POST['player_name'] : [];
     $ruts = is_array($_POST['player_rut'] ?? null) ? $_POST['player_rut'] : [];
     $draft['players'] = [];
-    foreach (array_slice(array_keys($names + $ruts), 0, 50) as $index) {
-        $draft['players'][] = [
-            'name' => is_string($names[$index] ?? null) ? trim($names[$index]) : '',
-            'rut' => is_string($ruts[$index] ?? null) ? trim($ruts[$index]) : '',
-        ];
+    foreach (array_keys($names + $ruts) as $index) {
+        $name = is_string($names[$index] ?? null) ? trim($names[$index]) : '';
+        $rut = is_string($ruts[$index] ?? null) ? trim($ruts[$index]) : '';
+        if ($name === '' && $rut === '') continue;
+
+        $draft['players'][] = compact('name', 'rut');
+        if (count($draft['players']) === 50) break;
     }
     return $draft;
 }
@@ -165,13 +167,9 @@ function tournamentPortal(string $view, ?array $profile, TournamentStore $store,
             $sessionDraft['size'] = (int) $tournament['teamSize'];
             $sessionDraft['validated'] = false;
             unset($sessionDraft['reviewKey'], $sessionDraft['review']);
-            $remaining = $sessionDraft['size'] - 1 - count($sessionDraft['players']);
-            $adjustment = match (true) {
-                $remaining > 0 => ' Completa ' . $remaining . ($remaining === 1 ? ' lugar adicional.' : ' lugares adicionales.'),
-                $remaining < 0 => ' La plantilla ahora tiene ' . -$remaining . ($remaining === -1 ? ' lugar menos.' : ' lugares menos.'),
-                default => '',
-            };
-            $formError = 'Cambió la cantidad de jugadores.' . $adjustment . ' Revisa la plantilla antes de continuar.';
+            $excess = count($sessionDraft['players']) + 1 - $sessionDraft['size'];
+            $adjustment = $excess > 0 ? ' Quita ' . $excess . ($excess === 1 ? ' compañero.' : ' compañeros.') : '';
+            $formError = 'El máximo ahora es ' . $sessionDraft['size'] . '.' . $adjustment . ' Revisa la plantilla antes de continuar.';
             $view = 'torneo-equipo';
         } elseif (in_array($action, ['tournament-review', 'tournament-confirm'], true)) {
             $matchesReview = $action === 'tournament-confirm'

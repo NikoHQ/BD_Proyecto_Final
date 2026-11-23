@@ -1,14 +1,15 @@
 <?php
 declare(strict_types=1);
 
-const FIRST_RESERVATION_MESSAGE = 'Podrás enviar otra solicitud cuando recepción confirme tu primera reserva.';
+function discardReservationSelection(): never
+{
+    unset($_SESSION['selection'], $_SESSION['key']);
+    go('horarios', 'La selección ya no coincide con la búsqueda. Elige de nuevo los bloques y el horario.');
+}
 
 function refreshSelection(array $filter, array $selection, DemoPortal $portal): array
 {
-    if (($selection['duration'] ?? 60) !== $portal->durationFor($filter['mode'])) {
-        unset($_SESSION['selection'], $_SESSION['key']);
-        go('horarios', 'La duración de esta modalidad cambió. Elige un horario con la nueva duración.');
-    }
+    if (!$portal->selectionMatches($filter, $selection)) discardReservationSelection();
     return $portal->quote($filter, $selection['court'], $selection['start']) ?? [];
 }
 
@@ -28,8 +29,10 @@ function handleReservationAction(
         go('buscar');
     }
     if ($action === 'search') {
-        $filter = ['mode' => $filter['mode'], 'date' => input('date'), 'site' => input('site')];
-        if (!$portal->validFilter($filter)) $errors[] = 'Elige una fecha desde hoy y un recinto válido.';
+        $blocks = filter_var(input('blocks'), FILTER_VALIDATE_INT);
+        $filter = ['mode' => $filter['mode'], 'date' => input('date'), 'site' => 'rastras',
+            'blocks' => $blocks === false ? 0 : $blocks];
+        if (!$portal->validFilter($filter)) $errors[] = 'Elige una fecha desde hoy y una cantidad válida de bloques.';
         else {
             $_SESSION['filter'] = $filter;
             unset($_SESSION['selection'], $_SESSION['key']);
@@ -46,7 +49,7 @@ function handleReservationAction(
                 go('horarios', 'Encontramos horarios en la siguiente fecha disponible.', 'info');
             }
         }
-        go('horarios', 'Busca en otra fecha o cambia de recinto.');
+        go('horarios', 'Prueba otra fecha o elige menos bloques.');
     }
     if ($action === 'recheck' && $selection) {
         $quote = refreshSelection($filter, $selection, $portal);
@@ -76,14 +79,8 @@ function handleReservationAction(
             go('acceso', 'Tu sesión venció. Ingresa para continuar con tu selección.');
         }
         if (!$selection || !hash_equals($_SESSION['key'] ?? '', input('key'))) go('buscar', 'Selecciona un horario para continuar.');
-        $result = $portal->create($user, $filter, $selection, input('key'));
-        if (($result['error'] ?? '') === 'FIRST_RESERVATION_PENDING') {
-            go('reservas', FIRST_RESERVATION_MESSAGE);
-        }
-        if (($result['error'] ?? '') === 'DURATION_CHANGED') {
-            unset($_SESSION['selection'], $_SESSION['key']);
-            go('horarios', 'La duración de esta modalidad cambió. Elige un horario con la nueva duración.');
-        }
+        $result = submitPortalRequest($portal, $user, $profile['name'], $filter, $selection, input('key'));
+        if (($result['error'] ?? '') === 'SELECTION_CHANGED') discardReservationSelection();
         if (($result['error'] ?? '') === 'SLOT_TAKEN') {
             unset($_SESSION['selection'], $_SESSION['key']);
             go('horarios', 'Ese horario se ocupó. Conservamos tus filtros para que elijas otro.');
@@ -99,7 +96,6 @@ function handleReservationAction(
             go('acceso', 'Tu sesión venció. Tu selección sigue guardada.');
         }
         if (!isset($result['booking'])) go('revisar', 'No pudimos procesar la solicitud. Puedes volver a intentarlo.');
-        publishPortalRequest($result['booking'], $profile['name']);
         $_SESSION['receipt'] = $result['booking']['code'];
         $_SESSION['return'] = 'inicio';
         go('comprobante');

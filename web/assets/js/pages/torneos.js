@@ -69,7 +69,7 @@ function tournamentView() {
       <section class="card mb-0" aria-labelledby="tournament-title">
         <div class="card-body tournament-header">
           <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
-            <div><div class="d-flex flex-wrap align-items-center gap-2"><h2 id="tournament-title">${escapeHtml(tournament.name)}</h2>${tournamentStateBadge(tournament)}</div><p class="small text-secondary mb-0">${escapeHtml(siteName(tournament.site))} · ${escapeHtml(tournament.sport)} · ${tournamentDates(tournament)}</p><p class="small text-secondary mb-0">${tournament.teamSize} por equipo · ${tournament.discount}% de descuento de cancha</p></div>
+            <div><div class="d-flex flex-wrap align-items-center gap-2"><h2 id="tournament-title">${escapeHtml(tournament.name)}</h2>${tournamentStateBadge(tournament)}</div><p class="small text-secondary mb-0">${escapeHtml(siteName(tournament.site))} · ${escapeHtml(tournament.sport)} · ${tournamentDates(tournament)}</p><p class="small text-secondary mb-0">Hasta ${tournament.teamSize} ${tournament.teamSize === 1 ? "jugador" : "jugadores"} por equipo</p></div>
             <div class="d-flex flex-wrap gap-2">
               ${button('tournament-agenda', `${icon('calendar3')} Ver en Agenda`, 'btn btn-light border btn-sm')}
               ${canRegister ? button('register-team', `${icon('person-plus')} Inscribir equipo`, 'btn-accent btn-sm') : ''}
@@ -98,19 +98,35 @@ const tournamentBlocks = tournament => tournamentBookings.filter(
   row => tournaments[row.tournamentId] === tournament && row.status !== 'cancelled'
 );
 const canScheduleTournament = tournament => ['PLANIFICADO', 'EN_CURSO'].includes(tournament.state);
-const canEditTournament = tournament => tournament.state === 'PLANIFICADO' &&
+const canEditTournament = tournament => tournament.state === 'PLANIFICADO';
+const canEditTournamentDetails = tournament => canEditTournament(tournament) &&
   !tournament.roster.length && !tournament.teams && !tournamentBlocks(tournament).length;
+const modalityMaximums = new Map([['Fútbol 6', 10], ['Pádel dobles', 2], ['Tenis', 1]]);
+const teamMaximumForMode = mode => modalityMaximums.get(mode) ?? 2;
+const largestActiveRoster = tournament => Math.max(1, ...(tournament?.roster ?? [])
+  .filter(team => !team.withdrawn).map(team => team.players.length));
+const maximumField = (maximum, minimum = 1) => `<label class="col-sm-6">Máximo de jugadores por equipo
+  <input class="form-control" type="number" name="teamSize" min="${minimum}" max="50" required value="${maximum}">
+  <small class="text-secondary">Incluye al capitán. El equipo puede tener menos jugadores.</small></label>`;
 const tournamentFormError = '<p class="text-danger small mt-2 mb-0" id="tournament-form-error" role="alert"></p>';
 const showTournamentError = message => { $('tournament-form-error').textContent = message; };
 const venueSports = site => [...new Set(courts.flatMap((row, i) => row[1] === site && courtAvailable(i) ? courtModes(i) : []))];
 
 function openTournamentConfig(edit = false) {
   const tournament = edit ? tournaments[selectedTournament] : null;
+  if (tournament && !canEditTournament(tournament)) return;
+  if (tournament && !canEditTournamentDetails(tournament)) {
+    return showDialog('Ajustar máximo de jugadores', `
+      <form id="tournament-config-form" data-edit="true" data-maximum-only="true">
+        <div class="row g-3">${maximumField(tournament.teamSize, largestActiveRoster(tournament))}</div>
+        ${tournamentFormError}${modalActions('Guardar máximo')}
+      </form>`);
+  }
   const demoSites = siteRecords.filter(entry => entry.status === 'ACTIVO' && venueSports(entry.key).length).map(entry => entry.key);
   if (!demoSites.length) return showDialog('Sin recintos disponibles', '<p>Activa un recinto con una instalación disponible.</p>');
-  if (tournament && !canEditTournament(tournament)) return;
   const today = localClock()[0];
   const site = tournament?.site || demoSites[0];
+  const mode = tournament?.sport || venueSports(site)[0];
   showDialog(edit ? 'Editar configuración' : 'Nuevo torneo', `
     <form id="tournament-config-form" data-edit="${edit}">
       <div class="row g-3">
@@ -120,26 +136,39 @@ function openTournamentConfig(edit = false) {
         <label class="col-sm-6">Fecha de inicio<input class="form-control" type="date" name="startDate" min="${today}" required value="${tournament?.days[0] || today}"></label>
         <label class="col-sm-6">Fecha de término<input class="form-control" type="date" name="endDate" min="${today}" required value="${tournament?.days.at(-1) || today}"></label>
         <label class="col-sm-6">Cupos de equipos<input class="form-control" type="number" name="capacity" min="2" max="128" required value="${tournament?.capacity ?? 8}"></label>
-        <label class="col-sm-6">Jugadores por equipo<input class="form-control" type="number" name="teamSize" min="1" max="50" required value="${tournament?.teamSize ?? 2}"><small class="text-secondary">Incluye al capitán. Para modalidad individual usa 1.</small></label>
-        <label class="col-sm-6">Descuento de cancha (%)<input class="form-control" type="number" name="discount" min="0" max="100" step="0.01" required value="${tournament?.discount ?? 0}"></label>
+        ${maximumField(tournament?.teamSize ?? teamMaximumForMode(mode))}
       </div>
       ${tournamentFormError}${modalActions(edit ? 'Guardar configuración' : 'Crear torneo')}
     </form>`);
+  const form = $('tournament-config-form');
+  form.addEventListener('change', ({ target }) => {
+    if (target.name === 'site') form.elements.teamSize.value = teamMaximumForMode(venueSports(target.value)[0]);
+    if (target.name === 'sport') form.elements.teamSize.value = teamMaximumForMode(target.value);
+  });
 }
 function saveTournamentConfig(form) {
   if (tournamentSaving || !tournamentSnapshot) return;
   const fields = Object.fromEntries(new FormData(form));
-  const name = fields.name.trim();
   const edit = form.dataset.edit === 'true';
   const existing = edit ? tournaments[selectedTournament] : null;
   if (existing && !canEditTournament(existing)) return;
+  const teamSize = Number(fields.teamSize);
+  if (!Number.isInteger(teamSize) || teamSize < largestActiveRoster(existing) || teamSize > 50) {
+    return showTournamentError('Respeta la plantilla activa más numerosa y el tope de 50 jugadores.');
+  }
+  if (form.dataset.maximumOnly === 'true') {
+    existing.teamSize = teamSize;
+    return completeTournamentAction('Máximo de jugadores actualizado.');
+  }
+  if (existing && !canEditTournamentDetails(existing)) return;
+  const name = fields.name.trim();
   if (!name || fields.endDate < fields.startDate) return showTournamentError('Ingresa un nombre y un rango de fechas válido.');
   if (tournaments.some(t => t !== existing && t.site === fields.site && t.name.toLowerCase() === name.toLowerCase())) {
     return showTournamentError('Ya existe un torneo con ese nombre en el recinto.');
   }
   const config = {
     name, site: fields.site, sport: fields.sport, capacity: Number(fields.capacity),
-    teamSize: Number(fields.teamSize), discount: Number(fields.discount),
+    teamSize,
     days: [...new Set([fields.startDate, fields.endDate])]
   };
   if (existing) Object.assign(existing, config);
@@ -179,7 +208,7 @@ function saveTournamentBlock(form) {
       !validClock(start) || !validClock(end, true) || start >= end) {
     return showTournamentError('Revisa la cancha, la fecha y el orden de las horas.');
   }
-  if (!bookingWithinHours(Number(court), day, start, end)) return showTournamentError('El bloque queda fuera del horario del recinto.');
+  if (!bookingUsesHourlyBlocks(Number(court), day, start, end)) return showTournamentError('Programa bloques consecutivos de una hora dentro del horario del recinto.');
   const block = {
     id: nextTournamentBookingId, tournamentId: selectedTournament, court: Number(court), date: day,
     start, end, activity: activity.trim() || 'Bloque de torneo',
@@ -199,6 +228,13 @@ function canEditTeam(tournament, team) {
 }
 function teamCaptain(team) {
   return demoClients.find(client => client.id === team.captainId) || team.players[0];
+}
+function staffPlayerRow(player = {}) {
+  return `<div class="row g-2 mb-3" data-staff-player>
+    <label class="col-sm-7">Nombre completo<input class="form-control" name="playerName" value="${escapeHtml(player.name || '')}" maxlength="100" required></label>
+    <label class="col-sm-5">RUT con DV<input class="form-control" name="playerRut" value="${escapeHtml(player.rut || '')}" maxlength="16" required></label>
+    <div class="col-12"><button type="button" class="btn btn-link text-danger px-0" data-staff-remove>Quitar compañero</button></div>
+  </div>`;
 }
 function openTeamRegistration(teamIndex = null) {
   const tournament = tournaments[selectedTournament];
@@ -233,13 +269,11 @@ function openTeamRegistration(teamIndex = null) {
         </div>
       </fieldset>
       <fieldset class="mt-3 border-top pt-3">
-        <legend class="fs-6 fw-semibold mb-1">Plantilla · ${tournament.teamSize} ${tournament.teamSize === 1 ? 'jugador' : 'jugadores'}</legend>
-        ${tournament.teamSize === 1 ? '<p class="small text-secondary mb-2">El capitán ocupa el único lugar de la plantilla.</p>' :
-          Array.from({ length: tournament.teamSize - 1 }, (_, i) => `
-            <div class="row g-2 mb-2">
-              <label class="col-sm-7">Jugador ${i + 2} · Nombre completo<input class="form-control" name="playerName" value="${escapeHtml(team?.players[i + 1]?.name || '')}" maxlength="100" required></label>
-              <label class="col-sm-5">Jugador ${i + 2} · RUT con DV<input class="form-control" name="playerRut" value="${escapeHtml(team?.players[i + 1]?.rut || '')}" maxlength="12" required></label>
-            </div>`).join('')}
+        <legend class="fs-6 fw-semibold mb-1">Plantilla · Máximo ${tournament.teamSize}</legend>
+        ${tournament.teamSize === 1 ? '<p class="small text-secondary mb-2">El capitán ocupa el único lugar de la plantilla.</p>' : `
+          <p class="small text-secondary mb-2">Agrega sólo los compañeros que se inscribirán.</p>
+          <div data-staff-players>${(team?.players.slice(1) || []).map(staffPlayerRow).join('')}</div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-staff-add>Agregar compañero</button>`}
       </fieldset>
       <p id="team-form-error" class="text-danger small mt-2 mb-0" role="alert"></p>
       <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
@@ -247,6 +281,27 @@ function openTeamRegistration(teamIndex = null) {
         <button type="submit" class="btn btn-accent">${editing ? 'Guardar equipo' : 'Inscribir equipo'}</button>
       </div>
     </form>`);
+  const form = $('team-registration-form');
+  const players = form.querySelector('[data-staff-players]');
+  const add = form.querySelector('[data-staff-add]');
+  if (!players || !add) return;
+  const update = () => { add.disabled = players.children.length + 1 >= tournament.teamSize; };
+  add.addEventListener('click', () => {
+    if (add.disabled) return;
+    players.insertAdjacentHTML('beforeend', staffPlayerRow());
+    players.lastElementChild.querySelector('input').focus();
+    update();
+  });
+  players.addEventListener('click', event => {
+    const remove = event.target.closest('[data-staff-remove]');
+    if (!remove) return;
+    const row = remove.closest('[data-staff-player]');
+    const next = row.nextElementSibling || row.previousElementSibling;
+    row.remove();
+    update();
+    (next?.querySelector('input') || add).focus();
+  });
+  update();
 }
 function updateCaptainResults() {
   $('team-captain').value = '';
@@ -342,13 +397,12 @@ async function submitTeamRegistration(form) {
   }
   const data = new FormData(form);
   const ruts = data.getAll('playerRut');
-  const players = data.getAll('playerName').map((name, index) => {
-    const rut = parseRut(ruts[index]);
-    const client = demoClients.find(entry => entry.rut === rut);
-    return { name: client?.name || name.trim(), rut };
-  });
-  if (players.length !== tournament.teamSize - 1 || players.some(player => !player.name || !player.rut)) {
-    return error('Completa la plantilla con nombres y RUT válidos.');
+  const players = data.getAll('playerName').map((name, index) => ({ name: name.trim(), rut: parseRut(ruts[index]) }));
+  if (players.length + 1 > tournament.teamSize) {
+    return error(`El equipo admite hasta ${tournament.teamSize} jugadores, incluido el capitán.`);
+  }
+  if (players.some(player => !player.name || !player.rut)) {
+    return error('Ingresa nombre y RUT válido para cada compañero.');
   }
   players.unshift({ name: captain.name, rut: captain.rut });
   const playerRuts = new Set(players.map(player => player.rut));

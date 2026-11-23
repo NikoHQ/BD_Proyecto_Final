@@ -3,7 +3,7 @@
 **Qué es este archivo.** La llave para leer la base sin adivinar: qué significa cada prefijo y
 sufijo de los nombres, qué valores admite cada columna de estado, y qué guarda cada tabla.
 **Para quién:** cualquiera del equipo que abra el esquema, y para la defensa.
-**Estado:** describe el esquema **v3** (22 tablas). Los nombres de las tablas nuevas son los
+**Estado:** describe el esquema **v3 de transición** (16 tablas). Los nombres de las tablas nuevas son los
 canónicos; si alguna vez discrepan, manda `04_ddl_v3.sql`.
 
 ---
@@ -67,20 +67,15 @@ Si una columna no aparece aquí, es texto libre con un largo máximo.
 | `SGCD_ADMINISTRADORES` | `ESTADO_ADMINISTRADOR` | `ACTIVO` · `INACTIVO` |
 | `SGCD_CREDENCIALES` | `ROL_CREDENCIAL` | `ADMINISTRADOR` · `OPERADOR` · `CLIENTE` |
 | `SGCD_CREDENCIALES` | `ESTADO_CREDENCIAL` | `ACTIVA` · `BLOQUEADA` · `INACTIVA` |
-| `SGCD_PLANES_MEMBRESIA` | `ESTADO_PLAN` | `ACTIVO` · `INACTIVO` |
-| `SGCD_ARTICULOS` | `ESTADO_ARTICULO` | `ACTIVO` · `INACTIVO` |
 | `SGCD_CANCHAS` | `TIPO_CANCHA` | `CANCHA` · `GIMNASIO` · `SALA` · `PISCINA` |
 | `SGCD_CANCHAS` | `ESTADO_CANCHA` | `DISPONIBLE` · `MANTENCION` · `INACTIVA` |
 | `SGCD_MODALIDADES` | `ESTADO_MODALIDAD` | `ACTIVO` · `INACTIVO` |
 | `SGCD_TARIFAS` | `ESTADO_TARIFA` | `ACTIVA` · `INACTIVA` |
-| `SGCD_MEMBRESIAS` | `ESTADO_MEMBRESIA` | `ACTIVA` · `VENCIDA` · `CANCELADA` |
-| `SGCD_MOVIMIENTOS_PUNTOS` | `TIPO_MOVIMIENTO` | `GANADO` · `CANJEADO` · `AJUSTE` |
 | `SGCD_RESERVAS` | `ESTADO_RESERVA` | `PENDIENTE` · `CONFIRMADA` · `CANCELADA` · `COMPLETADA` |
 | `SGCD_RESERVAS` | `TIPO_RESERVA` | `NORMAL` · `TORNEO` |
 | `SGCD_RESERVAS` | `ORIGEN_RESERVA` | `MOSTRADOR` · `WEB` |
 | `SGCD_TORNEOS` | `ESTADO_TORNEO` | `PLANIFICADO` · `EN_CURSO` · `FINALIZADO` · `CANCELADO` |
 | `SGCD_EQUIPOS` | `ESTADO_EQUIPO` | `INSCRITO` · `RETIRADO` |
-| `SGCD_OPERACIONES_IMPLEMENTOS` | `TIPO_OPERACION` | `VENTA` · `ARRIENDO` |
 | `SGCD_PAGOS` | `MEDIO_PAGO` | `EFECTIVO` · `DEBITO` · `CREDITO` · `TRANSFERENCIA` |
 
 ---
@@ -165,25 +160,13 @@ cliente o a un administrador.
 | `ROL_CREDENCIAL` | qué puede hacer |
 | `ESTADO_CREDENCIAL` | `BLOQUEADA` impide entrar sin borrar nada |
 | `ID_CLIENTE` / `ID_ADMINISTRADOR` | dueño; exactamente uno de los dos |
-| `FECHA_VERIFICACION_CREDENCIAL` | `NULL` = cuenta **no verificada**: puede reservar, no puede ver historial |
+| `FECHA_VERIFICACION_CREDENCIAL` | `NULL` = marca de verificación histórica. El acceso a reservas propias usa la credencial activa |
 | `ID_ADMINISTRADOR_VERIFICADOR` | quién respondió por la identidad |
 
 **Reglas:** una sola credencial por ficha (`UNIQUE ID_CLIENTE`); rol `CLIENTE` exige
 `ID_CLIENTE`; el personal siempre nace verificado.
 
-### 3.4 Membresías y puntos
-
-**`SGCD_PLANES_MEMBRESIA`** — el producto: nombre, duración en días, beneficio, descuento %.
-
-**`SGCD_MEMBRESIAS`** — un cliente suscrito a un plan, con fecha de inicio y término. Estados:
-`ACTIVA`, `VENCIDA`, `CANCELADA`. La vigencia contra la fecha de una reserva la valida PL/SQL, no
-el DDL.
-
-**`SGCD_MOVIMIENTOS_PUNTOS`** — libro de puntos: cada fila suma o resta. `CANTIDAD_MOVIMIENTO`
-distinto de cero; el signo lo pone el tipo (`GANADO` positivo, `CANJEADO` negativo). El saldo es
-una suma, nunca una columna.
-
-### 3.5 Reservas — el corazón
+### 3.4 Reservas — el corazón
 
 **`SGCD_RESERVAS`** — **el único calendario del sistema**. Una reserva de mostrador, una reserva
 web y el bloque de cancha arrendado para un torneo son filas de esta tabla.
@@ -191,7 +174,7 @@ web y el bloque de cancha arrendado para un torneo son filas de esta tabla.
 | Columna | Significado |
 |---|---|
 | `ID_RESERVA` | llave interna |
-| `ID_CLIENTE` | a nombre de quién; `NULL` solo si es bloque de torneo del propio club |
+| `ID_CLIENTE` | a nombre de quién; `NULL` sólo si la reserva está vinculada a un torneo |
 | `ID_ADMINISTRADOR` | quién la tomó en el mesón; `NULL` si vino de la web |
 | `ID_CANCHA` | qué instalación ocupa |
 | `ID_MODALIDAD` | bajo qué reglamento se juega; siempre obligatoria |
@@ -207,7 +190,7 @@ web y el bloque de cancha arrendado para un torneo son filas de esta tabla.
 único solo atrapa inicios idénticos; el cruce parcial lo detecta `SGCD_PKG_RESERVAS` comparando
 intervalos. Una reserva `CANCELADA` no bloquea.
 
-### 3.6 Torneos — sin partidos
+### 3.5 Torneos — sin partidos
 
 **`SGCD_TORNEOS`** — el evento.
 | Columna | Significado |
@@ -245,19 +228,9 @@ equipo por torneo" vive en el paquete, porque cruza `EQUIPOS`.
 **El arriendo de cancha del torneo no es una tabla aparte:** son filas de `SGCD_RESERVAS` con
 `TIPO_RESERVA = 'TORNEO'` e `ID_TORNEO` apuntando al evento.
 
-### 3.7 Caja e implementos
+### 3.6 Pagos
 
-**`SGCD_ARTICULOS`** — lo que se vende o se arrienda: balones, petos, paletas.
-
-**`SGCD_OPERACIONES_IMPLEMENTOS`** — cabecera de una venta o un arriendo de implementos a un
-cliente, con su importe total.
-
-**`SGCD_DETALLES_IMPLEMENTOS`** — líneas de esa operación: artículo, cantidad, precio acordado,
-entrega y devolución (prevista y real).
-
-**`SGCD_PAGOS`** — un pago apunta a **exactamente un origen**: una reserva, una operación de
-implementos o una membresía. Ese XOR es la restricción `CK_SGCD_PAGO_ORIGEN`; si algún día hay
-pago de inscripción a torneo, se agrega un cuarto brazo y nada más.
+**`SGCD_PAGOS`** registra importe, fecha y medio de pago. Cada fila requiere una referencia a `SGCD_RESERVAS`.
 
 ---
 
@@ -271,12 +244,9 @@ RECINTOS ──┬── CANCHAS ──┬── CANCHAS_MODALIDADES ──┬�
 DEPORTES ── MODALIDADES ─┘
 
 CLIENTES ──┬── CREDENCIALES  (1:0..1, opcional)
-           ├── MEMBRESIAS ── PLANES_MEMBRESIA
-           ├── MOVIMIENTOS_PUNTOS
            ├── RESERVAS
            ├── EQUIPOS
-           ├── JUGADORES (enlace opcional por RUT)
-           └── OPERACIONES_IMPLEMENTOS ── DETALLES_IMPLEMENTOS ── ARTICULOS
+           └── JUGADORES (enlace opcional por RUT)
 
 ADMINISTRADORES ──┬── CREDENCIALES (1:0..1)
                   ├── RESERVAS (quién tomó la reserva en el mesón)
@@ -291,5 +261,5 @@ ADMINISTRADORES ──┬── CREDENCIALES (1:0..1)
   todo eso vive en los paquetes PL/SQL (`SGCD_PKG_*`), descritos en el documento de diseño.
 - **Las vistas e informes.** No existen todavía; cuando se creen, se documentan aquí con el mismo
   formato.
-- **Los datos de ejemplo.** `06_datos_catalogos_v3.sql` carga catálogos y unas pocas filas demo;
+- **Los datos de ejemplo.** `06_catalogos_v3.sql` carga catálogos y unas pocas filas demo;
   el glosario describe estructura, no contenido.

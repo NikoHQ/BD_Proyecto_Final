@@ -4,17 +4,12 @@
     <?php summary($selection); ?>
     <section class="surface side">
       <h2>Enviar a recepción</h2><p>Tu reserva quedará pendiente hasta que recepción la confirme.</p>
-      <?php if ($awaitingFirst): ?>
-        <p class="notice"><?= e(FIRST_RESERVATION_MESSAGE) ?></p>
-        <a class="btn btn-success w-100" href="<?= e(url('reservas')) ?>">Ver mis reservas</a>
-      <?php else: ?>
-        <form method="post" data-once><?= csrf() ?><input type="hidden" name="action" value="send"><input type="hidden" name="key" value="<?= e($_SESSION['key']) ?>">
-          <button class="btn btn-success w-100"><?= icon('send') ?> Enviar reserva</button>
-        </form>
-        <form method="post" class="mt-2"><?= csrf() ?><input type="hidden" name="action" value="recheck">
-          <button class="btn btn-outline-success w-100">Consultar disponibilidad</button>
-        </form>
-      <?php endif; ?>
+      <form method="post" data-once><?= csrf() ?><input type="hidden" name="action" value="send"><input type="hidden" name="key" value="<?= e($_SESSION['key']) ?>">
+        <button class="btn btn-success w-100"><?= icon('send') ?> Enviar reserva</button>
+      </form>
+      <form method="post" class="mt-2"><?= csrf() ?><input type="hidden" name="action" value="recheck">
+        <button class="btn btn-outline-success w-100">Consultar disponibilidad</button>
+      </form>
     </section>
   </div>
 <?php elseif (in_array($view, ['comprobante','detalle'], true)): ?>
@@ -43,15 +38,14 @@
     </section>
   </div>
 <?php elseif ($view === 'reservas'): ?>
-  <div class="page-heading"><div><h1>Mis reservas</h1><p>Consulta tus próximas reservas y tu historial.</p></div><?php if (!$awaitingFirst): ?><a class="btn btn-success" href="<?= e(url()) ?>">Nueva reserva</a><?php endif; ?></div>
-  <?php if ($awaitingFirst): ?><p class="notice"><?= e(FIRST_RESERVATION_MESSAGE) ?></p><?php endif; ?>
+  <div class="page-heading"><div><h1>Mis reservas</h1><p>Consulta tus próximas reservas y tu historial.</p></div><a class="btn btn-success" href="<?= e(url()) ?>">Nueva reserva</a></div>
   <?php $history = $portal->history($user); ?>
   <?php $upcoming = array_filter($history, $portal->canCancel(...)); ?>
   <?php foreach (['Próximas reservas' => $upcoming, 'Historial' => array_reverse(array_diff_key($history, $upcoming))] as $label => $bookings): ?>
     <section class="surface mb-3"><h2><?= e($label) ?></h2>
       <?php if (!$bookings): ?><p class="mb-0">Todavía no hay reservas en esta sección.</p><?php endif; ?>
       <?php foreach ($bookings as $item): ?>
-        <div class="history-row"><div><strong><?= e($item['courtName']) ?> · <?= e(DemoPortal::MODES[$item['mode']]['label']) ?></strong>
+        <div class="history-row"><div><strong><?= e($item['courtName']) ?> · <?= e(DemoPortal::bookingMode($item)) ?></strong>
           <p class="mb-0"><?= e(dateLabel($item['date'])) ?> · <?= e($item['start'] . '–' . $item['end']) ?> · <?= e($item['code']) ?></p></div>
           <?= badge($item['status']) ?><a href="<?= e(url('detalle', ['codigo' => $item['code']])) ?>">Ver detalle <span class="visually-hidden"><?= e($item['code']) ?></span></a>
         </div>

@@ -24,7 +24,6 @@
 --   -20008 reserva no encontrada
 --   -20009 cambio de estado no permitido
 --   -20010 sin permiso sobre la reserva
---   -20011 cuenta no verificada
 --   -20012 el torneo no esta en PLANIFICADO
 --   -20013 cupos del torneo agotados
 --   -20014 jugador ya inscrito en otro equipo del mismo torneo
@@ -434,7 +433,18 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_RESERVAS AS
         RETURNING ID_RESERVA INTO p_id_reserva;
     END crear_reserva;
     PROCEDURE confirmar_reserva(p_id_reserva NUMBER, p_id_administrador NUMBER) IS
+        v_permitido NUMBER;
     BEGIN
+        SELECT COUNT(*) INTO v_permitido
+        FROM   SGCD_ADMINISTRADORES a
+        JOIN   SGCD_CREDENCIALES c ON c.ID_ADMINISTRADOR = a.ID_ADMINISTRADOR
+        WHERE  a.ID_ADMINISTRADOR = p_id_administrador
+        AND    a.ESTADO_ADMINISTRADOR = 'ACTIVO'
+        AND    c.ESTADO_CREDENCIAL = 'ACTIVA'
+        AND    c.ROL_CREDENCIAL = 'ADMINISTRADOR';
+        IF v_permitido = 0 THEN
+            RAISE_APPLICATION_ERROR(-20010, 'Solo un administrador activo puede confirmar reservas');
+        END IF;
         UPDATE SGCD_RESERVAS
         SET    ESTADO_RESERVA = 'CONFIRMADA'
         WHERE  ID_RESERVA = p_id_reserva AND ESTADO_RESERVA = 'PENDIENTE';
@@ -696,21 +706,11 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_CONSULTAS AS
 END SGCD_PKG_CONSULTAS;
 /
 CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CONSULTAS AS
-    FUNCTION cliente_verificado(p_id_credencial NUMBER) RETURN NUMBER IS
-        v_cliente NUMBER;
-    BEGIN
-        v_cliente := SGCD_PKG_AUTH.cliente_de_credencial(p_id_credencial);
-        IF NOT SGCD_PKG_AUTH.esta_verificada(p_id_credencial) THEN
-            RAISE_APPLICATION_ERROR(-20011,
-                'La cuenta no esta verificada: recepcion debe confirmarla antes de ver el historial');
-        END IF;
-        RETURN v_cliente;
-    END cliente_verificado;
     PROCEDURE historial_cliente(
         p_id_credencial NUMBER, p_reservas OUT SYS_REFCURSOR, p_pagos OUT SYS_REFCURSOR) IS
         v_cliente NUMBER;
     BEGIN
-        v_cliente := cliente_verificado(p_id_credencial);
+        v_cliente := SGCD_PKG_AUTH.cliente_de_credencial(p_id_credencial);
         OPEN p_reservas FOR
             SELECT r.ID_RESERVA, r.INICIO_RESERVA, r.TERMINO_RESERVA, r.ESTADO_RESERVA,
                    r.TIPO_RESERVA, r.IMPORTE_ACORDADO_RESERVA, c.NOMBRE_CANCHA
@@ -721,24 +721,18 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_CONSULTAS AS
         OPEN p_pagos FOR
             SELECT p.ID_PAGO, p.FECHA_PAGO, p.IMPORTE_PAGO, p.MEDIO_PAGO
             FROM   SGCD_PAGOS p
-            LEFT   JOIN SGCD_RESERVAS r ON r.ID_RESERVA = p.ID_RESERVA
-            LEFT   JOIN SGCD_MEMBRESIAS m ON m.ID_MEMBRESIA = p.ID_MEMBRESIA
-            LEFT   JOIN SGCD_OPERACIONES_IMPLEMENTOS o ON o.ID_OPERACION = p.ID_OPERACION
-            WHERE  r.ID_CLIENTE = v_cliente OR m.ID_CLIENTE = v_cliente OR o.ID_CLIENTE = v_cliente
+            JOIN   SGCD_RESERVAS r ON r.ID_RESERVA = p.ID_RESERVA
+            WHERE  r.ID_CLIENTE = v_cliente
             ORDER BY p.FECHA_PAGO DESC;
     END historial_cliente;
     FUNCTION estado_cuenta(p_id_credencial NUMBER) RETURN SYS_REFCURSOR IS
         v_cliente NUMBER;
         v_cur SYS_REFCURSOR;
     BEGIN
-        v_cliente := cliente_verificado(p_id_credencial);
+        v_cliente := SGCD_PKG_AUTH.cliente_de_credencial(p_id_credencial);
         OPEN v_cur FOR
             SELECT c.ID_CLIENTE, c.RUT_CLIENTE, c.DV_CLIENTE, c.NOMBRE_CLIENTE,
-                   c.CORREO_CLIENTE, c.TELEFONO_CLIENTE,
-                   (SELECT COUNT(*) FROM SGCD_MEMBRESIAS m
-                    WHERE m.ID_CLIENTE = c.ID_CLIENTE AND m.ESTADO_MEMBRESIA = 'ACTIVA') AS MEMBRESIAS_ACTIVAS,
-                   (SELECT NVL(SUM(mp.CANTIDAD_MOVIMIENTO), 0) FROM SGCD_MOVIMIENTOS_PUNTOS mp
-                    WHERE mp.ID_CLIENTE = c.ID_CLIENTE) AS SALDO_PUNTOS
+                   c.CORREO_CLIENTE, c.TELEFONO_CLIENTE
             FROM   SGCD_CLIENTES c
             WHERE  c.ID_CLIENTE = v_cliente;
         RETURN v_cur;

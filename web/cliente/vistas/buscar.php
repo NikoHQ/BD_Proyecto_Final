@@ -18,25 +18,34 @@
 <?php elseif ($view === 'buscar'): ?>
   <div class="split">
     <section class="surface">
-      <h1>Buscar disponibilidad</h1><p>Elige la fecha y el recinto que prefieras.</p>
+      <h1>Buscar disponibilidad</h1><p>Elige la fecha y la cantidad de bloques consecutivos.</p>
       <div class="mode-strip"><?= icon(DemoPortal::MODES[$filter['mode']]['icon']) ?> <strong><?= e(DemoPortal::MODES[$filter['mode']]['label']) ?></strong><a href="<?= e(url()) ?>">Cambiar modalidad</a></div>
-      <p class="small mb-0 mt-2"><?= $portal->durationFor($filter['mode']) ?> minutos por reserva</p>
+      <p class="small mt-2"><?= icon('geo-alt') ?> Las Rastras</p>
       <form method="post"><?= csrf() ?><input type="hidden" name="action" value="search">
         <div class="row g-3 my-3">
           <div class="col-sm"><label for="fecha" class="form-label">Fecha</label><input id="fecha" name="date" type="date" min="<?= e($portal->today) ?>" value="<?= e($filter['date']) ?>" class="form-control" required></div>
-          <div class="col-sm"><label for="recinto" class="form-label">Recinto</label><select id="recinto" name="site" class="form-select">
-            <option value="">Todos los recintos</option>
-            <?php foreach (DemoPortal::SITES as $key => $site): ?><option value="<?= e($key) ?>" <?= $filter['site'] === $key ? 'selected' : '' ?>><?= e($site) ?></option><?php endforeach; ?>
-          </select></div>
+          <div class="col-sm">
+            <label for="bloques" class="form-label">Bloques consecutivos de una hora</label>
+            <select id="bloques" name="blocks" class="form-select" required>
+              <?php for ($count = 1; $count <= DemoPortal::MAX_BLOCKS; $count++): ?>
+                <option value="<?= $count ?>" <?= $filter['blocks'] === $count ? 'selected' : '' ?>><?= $count === 1 ? '1 bloque · 1 hora' : e("$count bloques · $count horas") ?></option>
+              <?php endfor; ?>
+            </select>
+          </div>
         </div>
         <button class="btn btn-success w-100"><?= icon('search') ?> Buscar horarios</button>
       </form>
     </section>
-    <aside class="surface side"><h2>¿Cómo funciona?</h2><ol class="how"><li>Elige una cancha y un horario.</li><li>Ingresa a tu cuenta y revisa el total.</li><li>Envía tu solicitud para que recepción la confirme.</li></ol></aside>
+    <aside class="surface side"><h2>¿Cómo funciona?</h2><ol class="how"><li>Elige cancha y hora de inicio. La reserva cubre todos los bloques que seleccionaste.</li><li>Ingresa a tu cuenta y revisa el total.</li><li>Envía tu solicitud para que recepción la confirme.</li></ol>
+      <?php if (in_array($filter['mode'], ['padel', 'tenis'], true)): ?>
+        <p class="small mb-0">Canchas y tarifas de <?= $filter['mode'] === 'padel' ? 'pádel' : 'tenis' ?> de ejemplo, pendientes de confirmación.</p>
+      <?php endif; ?>
+    </aside>
   </div>
 <?php elseif ($view === 'horarios'): ?>
   <?php
   $slots = $portal->availability($filter);
+  $blockLabel = $filter['blocks'] === 1 ? '1 bloque de una hora' : $filter['blocks'] . ' bloques consecutivos';
   $selectedIndex = 0;
   foreach ($slots as $index => $item) {
       if ($selection && $item['court'] === $selection['court'] && $item['start'] === $selection['start']) {
@@ -48,7 +57,7 @@
   $activeSlot = $slots[$selectedIndex] ?? null;
   ?>
   <div class="page-heading"><div><h1><?= $slots ? 'Horarios disponibles' : 'No encontramos horarios disponibles' ?></h1>
-    <p><?= e(DemoPortal::MODES[$filter['mode']]['label']) ?> · <?= e(dateLabel($filter['date'])) ?> · <?= $portal->durationFor($filter['mode']) ?> minutos</p></div>
+    <p><?= e(DemoPortal::MODES[$filter['mode']]['label']) ?> · <?= e(dateLabel($filter['date'])) ?> · <?= e($blockLabel) ?></p></div>
     <a class="btn btn-outline-success" href="<?= e(url('buscar')) ?>"><?= icon('sliders') ?> Cambiar filtros</a>
   </div>
   <?php if ($slots): ?>
@@ -79,10 +88,10 @@
       </aside>
     </form>
   <?php else: ?>
-    <section class="surface empty"><span class="sport-symbol"><?= icon('calendar-x') ?></span><h2>Prueba con otra fecha o recinto</h2>
-      <p>Recinto seleccionado · <?= e(DemoPortal::SITES[$filter['site']] ?? 'Todos los recintos') ?></p>
+    <section class="surface empty"><span class="sport-symbol"><?= icon('calendar-x') ?></span><h2>Prueba otra fecha o elige menos bloques</h2>
+      <p>Recinto seleccionado · Las Rastras</p>
       <form method="post" class="actions"><?= csrf() ?><input type="hidden" name="action" value="nearby">
-        <a class="btn btn-outline-success" href="<?= e(url('buscar')) ?>">Cambiar fecha o recinto</a>
+        <a class="btn btn-outline-success" href="<?= e(url('buscar')) ?>">Cambiar filtros</a>
         <button class="btn btn-success"><?= icon('calendar3') ?> Ver disponibilidad cercana</button>
       </form>
     </section>

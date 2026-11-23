@@ -34,20 +34,22 @@ Usa el puerto **8080** para ver los mismos torneos e inscripciones en ambos pane
 | Usuario de prueba | Clave inicial | Permite probar |
 | --- | --- | --- |
 | `ADMIN` | `Demo1234` | Perfil, gestión de personal y edición o anulación de pagos en la maqueta. |
-| `OPERADOR` | `Demo1234` | Perfil y pantallas operativas con las restricciones del rol. |
+| `OPERADOR` | `Demo1234` | Cuenta de transición de v3 para probar restricciones. |
 | `demo` | `SGCDdemo2026` | Cliente de prueba con historial y acceso a torneos. |
-| `nuevo` | `SGCDdemo2026` | Cliente que puede tener una primera solicitud pendiente hasta que recepción la confirme. |
+| `nuevo` | `SGCDdemo2026` | Cliente nuevo que puede enviar solicitudes. Cada reserva exige confirmación administrativa. |
 
 Oracle recibe las credenciales de personal desde los catálogos v3. Las dos cuentas de cliente pertenecen a la demo del portal. Si alguien cambió la clave en ese mismo Oracle, usa la clave vigente. Un administrador puede restablecer la de otro usuario desde **Usuarios del personal**. La recuperación con preguntas es tarea de backend y en la demo aparece como pendiente.
 
-En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar sesión**. El login, la gestión de personal y la consulta Oracle de catálogos requieren la base. Agenda, reservas de mostrador, clientes, pagos, recintos editables y tarifas usan datos locales del navegador. Torneos, duraciones y revisión de solicitudes web usan archivos temporales compartidos por la instancia PHP. Las cuentas y reservas del portal usan sesiones PHP de demo. Usa sólo datos ficticios.
+En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar sesión**. El login, la gestión de personal y la consulta Oracle de catálogos requieren la base. Agenda, reservas de mostrador, clientes, pagos, recintos editables y tarifas usan datos locales del navegador. Torneos y solicitudes web usan archivos temporales compartidos por la instancia PHP. Las cuentas y reservas del portal usan sesiones PHP de demo. Usa sólo datos ficticios.
 
 ## Recorrido sugerido
 
 1. Agenda y buscador global por nombre, RUT o número de reserva.
 2. Reservas y Clientes con filtros, selección, formularios y paginación.
-3. Recintos → Administrar canchas → Tarifas. Prueba un horario semanal y una franja nocturna.
+3. Recintos → Administrar canchas → Tarifas. Revisa el horario semanal, las seis canchas de Fútbol 6, la grande y una franja nocturna.
 4. Torneos → Ver equipos. Abre un plantel y revisa el nombre, capitán e integrantes.
-5. Entra como Operador y comprueba que la edición y anulación de pagos queden fuera de sus acciones.
+5. Registra un pago manual en una reserva disponible y comprueba que el detalle conserve un solo pago. La cuenta de transición `OPERADOR` permite comprobar el rechazo de confirmación web y de edición o anulación de pagos.
 
 Para probar reservas web de punta a punta e inscribir un equipo desde el portal, sigue el [recorrido del cliente](PORTAL_CLIENTE.md).
+
+El [mapa del UML de 19 tablas](MODELO_OBJETIVO.md) describe la base que se integrará. La demo arranca con el DDL v3 de transición.

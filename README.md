@@ -8,6 +8,7 @@ en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administració
 
 - [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
 - [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
+- [UML oficial de 19 tablas y mapa desde v3](docs/entrega/MODELO_OBJETIVO.md)
 - [Recorrido del portal de clientes](docs/entrega/PORTAL_CLIENTE.md)
 
 ---
@@ -34,14 +35,14 @@ en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administració
 | `sql/oracle/01_ddl_v2.sql` | Esquema v2: 17 tablas | histórico |
 | `sql/oracle/02_pruebas_v2.sql` | 26 pruebas de integridad de la v2 | histórico |
 | `sql/oracle/03_catalogos_v2.sql` | Catálogos de la v2 (2 recintos, 78 tarifas) | histórico |
-| `sql/oracle/04_ddl_v3.sql` | **Esquema v3: 22 tablas** (cliente web, credenciales, torneos) | compilado |
+| `sql/oracle/04_ddl_v3.sql` | **Esquema v3: 16 tablas** (cliente web, credenciales, torneos) | compilado |
 | `sql/oracle/05_paquetes_plsql.sql` | **6 paquetes de lógica de negocio** (compilado: 12 objetos VALID) | compilado |
 | `sql/oracle/06_catalogos_v3.sql` | Catálogos de la v3 (80 tarifas, 2 credenciales demo) | cargado |
 | `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
 | `sql/oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | pendiente |
 | `sql/oracle/09_torneos_tamano_plantilla.sql` | Migración incremental del tamaño de plantilla | disponible |
 
-Para inicializar un esquema v3 vacío, usa los scripts 04 a 06 como usuario `SGCD`. El script 04 recrea las tablas. Para incorporar el tamaño de plantilla a un esquema v3 existente, sigue [la guía de torneos](docs/entrega/TORNEOS_ORACLE.md).
+Para inicializar un esquema v3 vacío, usa los scripts 04 a 06 como usuario `SGCD`. El script 04 recrea las tablas. El esquema de transición de 16 tablas permite levantar la demo. Para desarrollar el backend final, adaptar los paquetes y la base al [UML oficial de 19 tablas](docs/entrega/MODELO_OBJETIVO.md).
 
 ## Convenciones de nombres
 
@@ -73,7 +74,7 @@ documento en el mismo commit.
 
 ## Qué falta
 
-1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo.
+1. `07_datos_operativos.sql` — clientes, credenciales de cliente, reservas, pagos y torneos demo.
 2. `08_pruebas_v3.sql` con la batería completa.
 3. Conectar la operación del panel a PHP y Oracle, incluida la recuperación de contraseña.
 4. Integrar el portal de clientes con Oracle, incluyendo reservas web e inscripciones a torneos.

@@ -62,11 +62,6 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
     </div>
     <div class="sidebar-wrapper">
       <nav class="mt-3" aria-label="Menú principal"><ul id="menu" class="nav sidebar-menu flex-column"></ul></nav>
-      <?php if ($account['ROL'] === 'ADMINISTRADOR'): ?>
-        <ul class="nav sidebar-menu flex-column"><li class="nav-item">
-          <a class="nav-link" href="/dashboardadmin/duraciones.php"><i class="bi bi-clock" aria-hidden="true"></i><span>Duración de reservas</span></a>
-        </li></ul>
-      <?php endif; ?>
       <div class="side-foot"><i class="bi bi-circle-fill me-1"></i> Modo demostración</div>
     </div>
   </aside>

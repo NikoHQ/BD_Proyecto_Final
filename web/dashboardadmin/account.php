@@ -22,13 +22,6 @@ function accountName(): string
     return $name;
 }
 
-function staffRole(): string
-{
-    $role = post('role');
-    if (!in_array($role, ['ADMINISTRADOR', 'OPERADOR'], true)) throw new DomainException('Selecciona un rol válido.');
-    return $role;
-}
-
 function saveAccountProfile(array $account): void
 {
     authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
@@ -48,7 +41,6 @@ function saveStaff(array $account, string $action): void
     rateLimit('staff-confirm', $actor['USUARIO']);
     currentPasswordMatches($actor);
     $name = accountName();
-    $role = staffRole();
     if ($action === 'create-staff') {
         $login = checkedLogin();
         $hash = newPasswordHash();
@@ -59,7 +51,7 @@ function saveStaff(array $account, string $action): void
                       INSERT INTO SGCD_ADMINISTRADORES (NOMBRE_ADMINISTRADOR)
                         VALUES (:name) RETURNING ID_ADMINISTRADOR INTO staff_id;
                       SGCD_PKG_AUTH.crear_credencial(:login, :hash, :role, NULL, staff_id, credential_id);
-                   END;', ['name' => $name, 'login' => $login, 'hash' => $hash, 'role' => $role]);
+                   END;', ['name' => $name, 'login' => $login, 'hash' => $hash, 'role' => 'ADMINISTRADOR']);
     } else {
         $target = accountBy('id', (int) post('id'), true);
         if (!$target || $target['ID'] === $actor['ID']) throw new DomainException('Edita tus datos desde Mi perfil.');
@@ -67,8 +59,8 @@ function saveStaff(array $account, string $action): void
         if (!in_array($status, ['ACTIVA', 'BLOQUEADA', 'INACTIVA'], true)) throw new DomainException('Selecciona un estado válido.');
         authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
             ['name' => $name, 'id' => $target['PERSONAL']]);
-        authQuery('UPDATE SGCD_CREDENCIALES SET ROL_CREDENCIAL = :role, ESTADO_CREDENCIAL = :status WHERE ID_CREDENCIAL = :id',
-            ['role' => $role, 'status' => $status, 'id' => $target['ID']]);
+        authQuery('UPDATE SGCD_CREDENCIALES SET ESTADO_CREDENCIAL = :status WHERE ID_CREDENCIAL = :id',
+            ['status' => $status, 'id' => $target['ID']]);
         if (post('password') !== '' || post('confirm') !== '') {
             $hash = newPasswordHash();
             authQuery('UPDATE SGCD_CREDENCIALES SET CLAVE_HASH_CREDENCIAL = :hash WHERE ID_CREDENCIAL = :id',
@@ -223,10 +215,6 @@ function roleName(string $role): string
           <?php else: ?>
             <label class="form-label w-100">Usuario<input class="form-control" name="login" maxlength="50" autocomplete="off" required></label>
           <?php endif; ?>
-          <label class="form-label w-100">Rol<select class="form-select" name="role">
-            <option value="OPERADOR">Operador</option>
-            <option value="ADMINISTRADOR"<?= ($target['ROL'] ?? '') === 'ADMINISTRADOR' ? ' selected' : '' ?>>Administrador</option>
-          </select></label>
           <?php if ($target): ?>
             <p class="form-text">Para restablecer la contraseña del usuario, rellena ambos campos.</p>
             <?= str_replace(' required', '', passwordFields()) ?>

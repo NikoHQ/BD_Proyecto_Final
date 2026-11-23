@@ -52,6 +52,28 @@ function tournamentRoster(array $players): void
     <?php
 }
 
+function tournamentPlayerFields(int $position, array $player, string $nameError = '', string $rutError = ''): void
+{
+    ?>
+    <fieldset class="player-fields mb-3 p-3 rounded-3" data-tournament-player>
+      <legend class="float-none fw-semibold fs-6 mb-2" data-player-legend>Compañero <?= $position ?></legend>
+      <div class="row g-2">
+        <label class="col-md-7">
+          <span class="form-label d-block">Nombre completo</span>
+          <input class="form-control <?= $nameError ? 'is-invalid' : '' ?>" name="player_name[]" value="<?= e($player['name']) ?>" maxlength="100" autocomplete="off" <?= $nameError ? 'aria-invalid="true" aria-describedby="player-name-error-' . $position . '"' : '' ?> required>
+          <?php if ($nameError): ?><span class="invalid-feedback" id="player-name-error-<?= $position ?>"><?= e($nameError) ?></span><?php endif; ?>
+        </label>
+        <label class="col-md">
+          <span class="form-label d-block">RUT</span>
+          <input class="form-control <?= $rutError ? 'is-invalid' : '' ?>" name="player_rut[]" value="<?= e($player['rut']) ?>" maxlength="16" placeholder="12.345.678-5" autocomplete="off" <?= $rutError ? 'aria-invalid="true" aria-describedby="player-rut-error-' . $position . '"' : '' ?> required>
+          <?php if ($rutError): ?><span class="invalid-feedback" id="player-rut-error-<?= $position ?>"><?= e($rutError) ?></span><?php endif; ?>
+        </label>
+      </div>
+      <button type="button" class="btn btn-link text-danger p-0 mt-2" data-tournament-remove>Quitar compañero</button>
+    </fieldset>
+    <?php
+}
+
 function tournamentFacts(array $tournament): void
 {
     ?>
@@ -59,7 +81,7 @@ function tournamentFacts(array $tournament): void
       <div><?= icon('geo-alt') ?><div><dt>Recinto</dt><dd><?= e($tournament['siteName']) ?></dd></div></div>
       <div><?= icon('bullseye') ?><div><dt>Modalidad</dt><dd><?= e($tournament['sport']) ?></dd></div></div>
       <div><?= icon('calendar3') ?><div><dt>Fechas</dt><dd><?= e(tournamentDateRange($tournament['days'])) ?></dd></div></div>
-      <div><?= icon('people') ?><div><dt>Plantilla</dt><dd><?= $tournament['teamSize'] === 1 ? 'Individual' : e($tournament['teamSize']) . ' por equipo, incluido el capitán' ?></dd></div></div>
+      <div><?= icon('people') ?><div><dt>Plantilla</dt><dd><?= $tournament['teamSize'] === 1 ? 'Individual' : 'Hasta ' . e($tournament['teamSize']) . ' jugadores por equipo, incluido el capitán' ?></dd></div></div>
     </dl>
     <?php
 }
@@ -115,7 +137,7 @@ function tournamentFacts(array $tournament): void
           <h2 class="mb-1"><?= e($item['name']) ?></h2>
           <p class="mb-0"><?= e($item['sport'] . ' · ' . $item['siteName']) ?><br><?= e(tournamentDateRange($item['days'])) ?></p>
           <strong><?= e(tournamentCapacity($item)) ?></strong>
-          <small><?= $item['teamSize'] === 1 ? 'Inscripción individual' : e($item['teamSize']) . ' jugadores por equipo' ?></small>
+          <small><?= $item['teamSize'] === 1 ? 'Inscripción individual' : 'Hasta ' . e($item['teamSize']) . ' jugadores por equipo' ?></small>
           <div><?= tournamentRegistrationBadge($item) ?></div>
           <a class="btn btn-outline-success mt-auto align-self-start" href="<?= e(url('torneo', ['torneo' => $item['id']])) ?>">Ver torneo <?= icon('arrow-right') ?></a>
         </article>
@@ -194,7 +216,7 @@ function tournamentFacts(array $tournament): void
         </form>
       <?php else: ?>
         <div class="mode-strip mb-3"><?= icon('person-badge') ?><div><strong><?= e($profile['name']) ?></strong><small class="d-block"><?= e($profile['rut']) ?> · Capitán</small></div></div>
-        <form method="post" action="<?= e(url('torneo-equipo', $route)) ?>" data-tournament-roster>
+        <form method="post" action="<?= e(url('torneo-equipo', $route)) ?>" data-tournament-roster data-roster-maximum="<?= $draft['size'] ?>">
           <?= csrf() ?><input type="hidden" name="action" value="tournament-review">
           <input type="hidden" name="draft_key" value="<?= e($draft['key']) ?>">
           <?php if (!$solo): ?>
@@ -202,33 +224,25 @@ function tournamentFacts(array $tournament): void
               <input id="team_name" name="team_name" class="form-control <?= isset($fieldErrors['team_name']) ? 'is-invalid' : '' ?>" type="text" maxlength="100" value="<?= e($draft['name']) ?>" <?= isset($fieldErrors['team_name']) ? 'aria-invalid="true" aria-describedby="team-name-error"' : '' ?> required>
               <?php if (isset($fieldErrors['team_name'])): ?><div class="invalid-feedback" id="team-name-error"><?= e($fieldErrors['team_name']) ?></div><?php endif; ?>
             </div>
+          <?php endif; ?>
+          <?php if (!$solo || $draft['players']): ?>
             <h2>Compañeros</h2>
-            <p>Ingresa el nombre completo y el RUT de cada compañero.</p>
+            <?php if (!$solo): ?><p>Puedes inscribirte solo o agregar compañeros con su nombre y RUT.</p><?php endif; ?>
             <?php $entered = 1; ?>
-            <?php for ($i = 0; $i < $draft['size'] - 1; $i++): ?>
-              <?php
-                $player = $draft['players'][$i] ?? ['name' => '', 'rut' => ''];
-                $nameError = $fieldErrors['name'][$i] ?? '';
-                $rutError = $fieldErrors['rut'][$i] ?? '';
-                if ($player['name'] !== '' && $player['rut'] !== '') $entered++;
-              ?>
-              <fieldset class="player-fields mb-3 p-3 rounded-3" data-tournament-player>
-                <legend class="float-none fw-semibold fs-6 mb-2">Compañero <?= $i + 1 ?></legend>
-                <div class="row g-2">
-                  <div class="col-md-7"><label for="player-name-<?= $i ?>" class="form-label">Nombre completo</label>
-                    <input class="form-control <?= $nameError ? 'is-invalid' : '' ?>" name="player_name[]" id="player-name-<?= $i ?>" value="<?= e($player['name']) ?>" maxlength="100" autocomplete="off" <?= $nameError ? 'aria-invalid="true" aria-describedby="player-name-error-' . $i . '"' : '' ?> required>
-                    <?php if ($nameError): ?><div class="invalid-feedback" id="player-name-error-<?= $i ?>"><?= e($nameError) ?></div><?php endif; ?>
-                  </div>
-                  <div class="col-md"><label for="player-rut-<?= $i ?>" class="form-label">RUT</label>
-                    <input class="form-control <?= $rutError ? 'is-invalid' : '' ?>" name="player_rut[]" id="player-rut-<?= $i ?>" value="<?= e($player['rut']) ?>" maxlength="16" placeholder="12.345.678-5" autocomplete="off" <?= $rutError ? 'aria-invalid="true" aria-describedby="player-rut-error-' . $i . '"' : '' ?> required>
-                    <?php if ($rutError): ?><div class="invalid-feedback" id="player-rut-error-<?= $i ?>"><?= e($rutError) ?></div><?php endif; ?>
-                  </div>
-                </div>
-              </fieldset>
-            <?php endfor; ?>
-            <p class="small" aria-live="polite"><span data-tournament-count><?= $entered ?></span> de <?= e($draft['size']) ?> jugadores ingresados</p>
+            <div data-tournament-players>
+              <?php foreach ($draft['players'] as $i => $player): ?>
+                <?php
+                  if ($player['name'] !== '' && $player['rut'] !== '') $entered++;
+                  tournamentPlayerFields($i + 1, $player, $fieldErrors['name'][$i] ?? '', $fieldErrors['rut'][$i] ?? '');
+                ?>
+              <?php endforeach; ?>
+            </div>
+            <template data-tournament-player-template><?php tournamentPlayerFields(1, ['name' => '', 'rut' => '']); ?></template>
+            <p class="small" aria-live="polite"><span data-tournament-count><?= $entered ?></span> de <?= $draft['size'] ?> jugadores como máximo</p>
+            <button type="button" class="btn btn-outline-success mb-3" data-tournament-add <?= $solo ? 'hidden' : '' ?>
+              <?= count($draft['players']) + 1 >= $draft['size'] ? 'disabled' : '' ?>><?= icon('person-plus') ?> Agregar compañero</button>
           <?php else: ?><p>Esta modalidad es individual. Tu cuenta ocupa el único lugar de la plantilla.</p><?php endif; ?>
-          <button class="btn btn-success"><?= $team ? 'Revisar cambios' : 'Revisar inscripción' ?> <?= icon('arrow-right') ?></button>
+          <button type="submit" class="btn btn-success"><?= $team ? 'Revisar cambios' : 'Revisar inscripción' ?> <?= icon('arrow-right') ?></button>
         </form>
       <?php endif; ?>
     </section>

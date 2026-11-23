@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../cliente/demo.php';
+
 final class TournamentRule extends RuntimeException
 {
     public function __construct(public readonly string $reason, string $message)
@@ -73,18 +75,18 @@ final class TournamentStore
     }
 
     public function validateTeam(string $tournamentId, array $captain, string $name, array $players,
-        ?string $teamId = null, ?int $expectedSize = null): array
+        ?string $teamId = null, ?int $expectedMaximum = null): array
     {
-        return $this->read(function (array $data) use ($tournamentId, $captain, $name, $players, $teamId, $expectedSize): array {
+        return $this->read(function (array $data) use ($tournamentId, $captain, $name, $players, $teamId, $expectedMaximum): array {
             $index = $this->tournamentIndex($data, $tournamentId);
-            return $this->checkedTeam($data, $index, $captain, $name, $players, $teamId, $expectedSize);
+            return $this->checkedTeam($data, $index, $captain, $name, $players, $teamId, $expectedMaximum);
         });
     }
 
     public function saveTeam(string $tournamentId, array $captain, string $name, array $players, string $requestKey,
-        ?string $teamId = null, ?int $expectedSize = null): array
+        ?string $teamId = null, ?int $expectedMaximum = null): array
     {
-        return $this->update(function (array &$data) use ($tournamentId, $captain, $name, $players, $requestKey, $teamId, $expectedSize): array {
+        return $this->update(function (array &$data) use ($tournamentId, $captain, $name, $players, $requestKey, $teamId, $expectedMaximum): array {
             $index = $this->tournamentIndex($data, $tournamentId);
             $tournament = &$data['tournaments'][$index];
             $rut = self::normalizeRut($captain['rut'] ?? '');
@@ -96,7 +98,7 @@ final class TournamentStore
             $retry = hash('sha256', serialize([$tournamentId, $rut, $identity, $teamId, $requestKey]));
             if (isset($data['requests'][$retry])) return $data['requests'][$retry];
 
-            $clean = $this->checkedTeam($data, $index, $captain, $name, $players, $teamId, $expectedSize);
+            $clean = $this->checkedTeam($data, $index, $captain, $name, $players, $teamId, $expectedMaximum);
             $teamIndex = $teamId === null ? count($tournament['roster']) : $this->teamIndex($tournament, $teamId);
             $existing = $tournament['roster'][$teamIndex] ?? [];
             $team = array_replace($existing, $clean, ['id' => $teamId ?? self::newId(), 'withdrawn' => false, 'owner' => $identity]);
@@ -127,7 +129,7 @@ final class TournamentStore
     }
 
     private function checkedTeam(array $data, int $index, array $captain, string $name, array $players,
-        ?string $teamId, ?int $expectedSize, bool $staff = false, bool $import = false, bool $withdrawn = false): array
+        ?string $teamId, ?int $expectedMaximum, bool $staff = false, bool $import = false, bool $withdrawn = false): array
     {
         $tournament = $data['tournaments'][$index];
         $captainRut = self::normalizeRut($captain['rut'] ?? '');
@@ -147,11 +149,11 @@ final class TournamentStore
             if ($registration === 'FULL') throw new TournamentRule('FULL', 'Ya se ocuparon todos los cupos.');
             if ($registration !== 'OPEN') throw new TournamentRule('CLOSED', 'El torneo ya no admite inscripciones.');
         }
-        if ($expectedSize !== null && $expectedSize !== $tournament['teamSize']) {
-            throw new TournamentRule('SIZE_CHANGED', 'La cantidad de jugadores cambió. Revisa tu plantilla.');
+        if ($expectedMaximum !== null && $expectedMaximum !== $tournament['teamSize']) {
+            throw new TournamentRule('SIZE_CHANGED', 'Cambió el máximo de jugadores. Revisa tu plantilla.');
         }
-        if (count($players) !== $tournament['teamSize'] - 1) {
-            throw new TournamentRule('INVALID_TEAM', 'Completa exactamente la cantidad de jugadores del torneo.');
+        if (!$withdrawn && count($players) >= $tournament['teamSize']) {
+            throw new TournamentRule('INVALID_TEAM', 'La plantilla admite hasta ' . $tournament['teamSize'] . ' jugadores, incluido el capitán.');
         }
         $clean = [];
         foreach ([$captain, ...$players] as $player) {
@@ -296,8 +298,14 @@ final class TournamentStore
                     $proposed['tournaments'][$index]['roster'][$teamIndex] = $saved;
                     $proposed['tournaments'][$index]['teams'] = $this->countTeams($proposed['tournaments'][$index]['roster']);
                 }
-                if ($proposed['tournaments'][$index]['teams'] > $proposed['tournaments'][$index]['capacity']) {
+                $configured = $proposed['tournaments'][$index];
+                if ($configured['teams'] > $configured['capacity']) {
                     throw new TournamentRule('FULL', 'La cantidad de equipos supera los cupos del torneo.');
+                }
+                foreach ($configured['roster'] as $team) {
+                    if (!$team['withdrawn'] && count($team['players']) > $configured['teamSize']) {
+                        throw new TournamentRule('SIZE_CHANGED', 'El máximo no puede quedar por debajo de una plantilla inscrita.');
+                    }
                 }
             }
             $data = $proposed;
@@ -315,7 +323,7 @@ final class TournamentStore
         $state = $input['state'] ?? '';
         $capacity = $input['capacity'] ?? null;
         $teamSize = $input['teamSize'] ?? null;
-        $discount = $input['discount'] ?? 0;
+        $discount = $previous['discount'] ?? ($import ? ($input['discount'] ?? 0) : 0);
         if (!$this->validName($name) || !$this->validName($site) || !$this->validName($siteName) || !$this->validName($sport)
             || !is_array($days) || !array_is_list($days) || !$days
             || !in_array($state, self::STATES, true) || !is_int($capacity) || $capacity < 2 || $capacity > 128
@@ -336,8 +344,8 @@ final class TournamentStore
         if (!in_array($state, $allowed, true) || ($previous && $previous['id'] !== ($input['id'] ?? null))) {
             throw new TournamentRule('STALE', 'Revisa el torneo o el cambio de estado solicitado.');
         }
-        if ($previous && ($previous['teams'] > 0 && $teamSize !== $previous['teamSize'] || $capacity < $previous['teams'])) {
-            throw new TournamentRule('SIZE_CHANGED', 'La configuración es incompatible con los equipos inscritos.');
+        if ($previous && $previous['state'] !== 'PLANIFICADO' && $teamSize !== $previous['teamSize']) {
+            throw new TournamentRule('CLOSED', 'El máximo se puede ajustar mientras el torneo está planificado.');
         }
         $id = $previous['id'] ?? self::newId();
         $roster = $previous['roster'] ?? [];
@@ -372,13 +380,17 @@ final class TournamentStore
                 || ($old[$id]['status'] === 'cancelled' && $status !== 'cancelled'))) {
                 throw new TournamentRule('STALE', 'El bloque cambió. Recarga la agenda.');
             }
+            if (!$import && !isset($old[$id]) && substr($start, -2) !== substr($end, -2)) {
+                throw new TournamentRule('INVALID_TEAM', 'Programa bloques completos de una hora.');
+            }
             if (!$import && !isset($old[$id]) && !in_array($tournament['state'], ['PLANIFICADO', 'EN_CURSO'], true)) {
                 throw new TournamentRule('CLOSED', 'Este torneo ya no admite nuevos bloques.');
             }
             if ($status === 'confirmed') {
                 foreach ($blocks as $other) {
-                    if ($other['status'] === 'confirmed' && $other['courtName'] === $courtName
-                        && $tournaments[$other['tournamentId']]['site'] === $tournament['site'] && $other['date'] === $day
+                    if ($other['status'] === 'confirmed' && $other['date'] === $day
+                        && $tournaments[$other['tournamentId']]['site'] === $tournament['site']
+                        && DemoPortal::namedCourtsShareSpace($other['courtName'], $courtName, $tournament['site'])
                         && $other['start'] < $end && $other['end'] > $start) {
                         throw new TournamentRule('INVALID_TEAM', 'La cancha ya tiene un bloque de torneo en ese horario.');
                     }
@@ -499,17 +511,17 @@ final class TournamentStore
         $padel = new DateTimeImmutable($year . '-12-05', $this->now->getTimezone());
         if ($padel <= $this->now) $padel = $this->now->modify('+7 days');
         $fixtures = [
-            ['copa-primavera', 'Copa Primavera Fútbol 7', 'Las Rastras', 'Fútbol 7', $first, 3, 16, 7, 0, 'Fútbol 7',
+            ['copa-primavera', 'Copa Primavera Fútbol 6', 'Las Rastras', 'Fútbol 6', $first, 3, 16, 10, 6, 0, 'Fútbol 6 · Cancha 1',
                 ['Los Robles', 'Atlético del Valle', 'Deportivo Maule', 'Rayo Norte', 'Club Lircay', 'Unión Talca',
                     'Los Halcones', 'Cancha Abierta', 'Estrella del Sur', 'Barrio Central', 'Los Alerces', 'Ribera FC']],
-            ['padel-mixto', 'Torneo Pádel Mixto', 'Las Rastras', 'Pádel dobles', $padel, 2, 12, 2, 2, 'Pádel 1',
+            ['padel-mixto', 'Torneo Pádel Mixto', 'Las Rastras', 'Pádel dobles', $padel, 2, 12, 2, 2, 7, 'Pádel 1',
                 ['Doble Rebote', 'Punto de Oro', 'Red Central', 'Saque Cruzado', 'Pádel Sur', 'Set Decisivo', 'Viboras del Maule', 'Red de Talca']],
-            ['liga-voley', 'Liga Interna de Vóleibol', 'La Florida', 'Vóleibol 6x6', $padel->modify('+7 days'), 2, 8, 6, 4, 'Cancha de vóleibol',
-                ['Bloque Central', 'Red del Sur', 'Saque Alto', 'Las Gaviotas', 'Equipo Horizonte', 'Vóley Lircay']],
+            ['copa-tenis', 'Copa de Tenis Las Rastras', 'Las Rastras', 'Tenis', $padel->modify('+7 days'), 2, 8, 1, 1, 9, 'Tenis 1',
+                ['Saque Alto', 'Club Horizonte', 'Red del Maule', 'Punto Final']],
         ];
         $tournaments = [];
         $blocks = [];
-        foreach ($fixtures as $index => [$id, $name, $site, $sport, $start, $length, $capacity, $teamSize, $court, $courtName, $names]) {
+        foreach ($fixtures as $index => [$id, $name, $site, $sport, $start, $length, $capacity, $teamSize, $rosterSize, $court, $courtName, $names]) {
             $days = [];
             for ($i = 0; $i < $length; $i++) {
                 $days[] = $start->modify("+$i days")->format('Y-m-d');
@@ -525,7 +537,7 @@ final class TournamentStore
                 $players = [];
                 $firstNames = ['Ana', 'Javier', 'Isabel', 'Tomás', 'Paula', 'Bruno', 'Claudia'];
                 $lastNames = ['Torres', 'Vidal', 'Reyes', 'Silva', 'Leiva', 'Molina', 'Díaz', 'Ortiz', 'Ríos', 'Lagos', 'Soto', 'Pardo'];
-                for ($i = 0; $i < $teamSize; $i++) {
+                for ($i = 0; $i < $rosterSize; $i++) {
                     $body = (string) (32000000 + $index * 10000 + $teamIndex * 50 + $i);
                     $given = $firstNames[($teamIndex + $i) % count($firstNames)];
                     $last = $lastNames[($teamIndex + $i * 3) % count($lastNames)];

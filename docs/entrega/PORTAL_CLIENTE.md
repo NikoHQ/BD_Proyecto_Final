@@ -1,44 +1,35 @@
-# Portal de clientes SGCD
+# Recorridos del portal de clientes SGCD
 
-La demo funciona con PHP 8.4 o superior y Bootstrap. En Docker, el portal de clientes se abre en [localhost:8080](http://localhost:8080/). También se puede ejecutar desde la raíz con `php -S 127.0.0.1:8091 -t web` y abrir [localhost:8091](http://127.0.0.1:8091/). Este segundo modo permite probar el portal sin Docker ni Oracle. El acceso del personal está en `/dashboardadmin`.
+Abre el [portal](http://127.0.0.1:8080/) y el [panel administrativo](http://127.0.0.1:8080/dashboardadmin/) apuntando a la misma instancia Docker. Para probar el portal por separado puedes ejecutar `php -S 127.0.0.1:8091 -t web` desde la raíz. La demo usa PHP 8.4 o superior. Las credenciales y la instalación están en [ACCESO_DEMO.md](ACCESO_DEMO.md).
 
-| Cuenta | Clave de demo | Permisos de ejemplo |
+| Cliente de prueba | Clave | Caso |
 | --- | --- | --- |
-| `demo` | `SGCDdemo2026` | Solicitar, consultar y cancelar sus reservas elegibles. |
-| `nuevo` | `SGCDdemo2026` | Consultar sus reservas desde el inicio. Puede tener una solicitud pendiente hasta que recepción confirme la primera. |
+| `demo` | `SGCDdemo2026` | Cliente con datos de ejemplo en su historial. |
+| `nuevo` | `SGCDdemo2026` | Cliente que puede solicitar varias reservas desde que inicia sesión. |
 
-El registro también admite un usuario ficticio nuevo con RUT válido de prueba, como `12.345.678-5`. Las cuentas y el historial de prueba quedan en la sesión PHP del navegador. La bandeja de solicitudes y su estado se guardan en un archivo temporal de la instancia. La disponibilidad de la maqueta combina los datos de cada sesión con los bloques de torneo compartidos para las canchas compatibles; la integración con Oracle debe compartir los bloqueos entre clientes y personal. Usa el puerto 8080 para probar cliente y personal en el mismo entorno Docker.
+El registro acepta un nuevo usuario de prueba con un RUT válido, por ejemplo `12.345.678-5`. Usa sólo datos ficticios.
 
-## Recorrido de prueba
+## Reservar uno o varios bloques
 
-1. Seleccionar Pádel dobles y buscar la fecha sugerida con la duración inicial de 60 minutos.
-2. Elegir Pádel 1 a las 18:00 y comprobar el total de $18.000 CLP. A las 17:30 el bloque cruza dos franjas y cuesta $17.000.
-3. Ingresar con `demo`, revisar y enviar. Se genera un código con estado pendiente de confirmación.
-4. Abrir «Mis reservas», entrar al detalle y confirmar la cancelación. Buscar otra vez para comprobar que se liberó el horario.
-5. Probar Las Rastras un lunes para ver el estado sin disponibilidad. En «Ayuda → Controles de la demo» se pueden simular un horario ocupado, un cambio de tarifa, una sesión vencida y un error temporal. El reinicio limpia esa sesión y sus solicitudes de reserva en la bandeja. Las inscripciones a torneos se gestionan desde Mis inscripciones.
+1. Selecciona una modalidad. El catálogo de Las Rastras muestra las seis canchas de Fútbol 6, la cancha grande y ejemplos provisionales de pádel y tenis.
+2. En **Buscar disponibilidad**, elige fecha y cantidad de bloques consecutivos de una hora. El recinto aparece como dato del catálogo. El lunes está cerrado en la demo.
+3. Elige el horario de inicio de una cancha disponible. Para comprobar una cotización con dos franjas, elige **Pádel 1** entre las 17:00 y las 19:00 en una fecha libre. El total de ejemplo es $34.000 por las franjas de $16.000 y $18.000.
+4. Inicia sesión o crea una cuenta, revisa el total y envía. El portal entrega un código y marca la solicitud **Pendiente de confirmación**.
+5. Envía una segunda solicitud en otro horario. Desde **Reservas → Solicitudes web**, un administrador puede confirmar una de ellas. En **Mis reservas**, la confirmada cambia de estado y la otra sigue pendiente.
+6. Cancela una reserva futura desde su detalle y comprueba que el horario se puede volver a solicitar. Para revisar el reparto de canchas, reserva la grande y comprueba que las canchas 1, 2 y 3 queden bloqueadas. Las canchas 4, 5 y 6 mantienen disponibilidad propia.
 
-Para probar una cuenta nueva, ingresa con `nuevo`, envía una solicitud y abre **Mis reservas**. Verás la primera solicitud y el aviso que limita nuevos envíos. En el panel de personal, abre **Reservas → Solicitudes web** y confirma esa reserva. Al volver a **Mis reservas**, se muestra como confirmada y se pueden enviar nuevas solicitudes. Si se cancela antes de confirmarla, el cliente puede enviar un reemplazo.
+Los controles en **Ayuda** permiten simular un horario ocupado, un cambio de precio, una sesión vencida y un fallo temporal. El reinicio limpia la sesión de demo y sus solicitudes web. Las inscripciones se administran desde **Mis inscripciones**.
 
-Las pruebas del servicio se ejecutan con `php tests/portal-cliente.php`.
+## Inscribir un equipo
 
-## Inscripción a torneos
+1. Abre [Torneos](http://127.0.0.1:8080/?vista=torneos) y elige un evento con inscripciones abiertas. Revisa sus horarios, cupos y máximo de jugadores.
+2. Inicia sesión, si corresponde. El portal vuelve al torneo y asigna al titular de la cuenta como capitán.
+3. Ingresa el nombre del equipo y añade sólo los compañeros que van a jugar. Para cada integrante adicional se pide nombre y RUT con DV. Por ejemplo, **Torneo Pádel Mixto** admite hasta dos personas en la demo, incluido el capitán. El formulario permite guardar al capitán solo o agregar un compañero.
+4. Revisa y guarda. **Mis inscripciones** muestra el equipo y su plantilla. Editar o retirar depende del plazo y estado de la competencia.
+5. Desde **Torneos → Ver equipos** del panel, recepción puede revisar la inscripción y el cupo consumido.
 
-Abre [Torneos del portal](http://127.0.0.1:8080/?vista=torneos) y selecciona **Torneo Pádel Mixto**. Puedes entrar con `demo` y la clave de esta guía. Este torneo pide un compañero, con nombre completo y un RUT ficticio válido como `22.222.222-2`. Revisa la plantilla y confirma. Desde **Mis inscripciones** puedes ver, editar o retirar el equipo mientras siga abierta la edición.
+## Qué comparte la demo
 
-En [el panel de torneos](http://127.0.0.1:8080/dashboardadmin/#torneos), abre el mismo torneo y pulsa **Ver equipos**. El equipo aparece en la plantilla y consume un cupo. La agenda del torneo también se publica en el portal. Usa el **puerto 8080 para ambos paneles** cuando pruebes la sincronización en Docker.
+Las inscripciones y solicitudes web se guardan en archivos de la instancia PHP. El portal relee solicitudes web y bloques de torneo al consultar disponibilidad. Los catálogos editables, tarifas y reservas de mostrador del panel se simulan en el navegador. Una instalación antigua puede mostrar torneos de ejemplo guardados previamente. Para probar una instancia limpia, usa un contenedor de aplicación de pruebas con almacenamiento temporal separado y un perfil de navegador nuevo.
 
-El almacenamiento de torneos de la demo vive temporalmente en el servidor PHP. En una instancia aún sin cambios compartidos, el personal puede recuperar datos previos con **Recuperar torneos de este navegador** cuando exista la copia local. Las cuentas registradas en la demo pertenecen a la sesión del navegador. Las inscripciones web de esas cuentas se identifican además con una identidad de sesión para distinguir registros ficticios del mismo RUT.
-
-Las pruebas de reglas y cupos concurrentes se ejecutan con `php tests/torneos-cliente.php`. La migración y el contrato para conectar el flujo real están en [Inscripción a torneos con Oracle](TORNEOS_ORACLE.md).
-
-## Duración de las reservas web
-
-El Administrador configura una duración por modalidad en **Duración de reservas** dentro de `/dashboardadmin/`. La demo parte con 60 minutos y admite entre 30 y 180 en tramos de 30. El portal muestra esa duración en la búsqueda y calcula con ella el horario de término y el total. Cada reserva guardada conserva su duración original.
-
-PHP comparte esta configuración entre panel y portal mediante un archivo temporal de la instancia. Para la integración, persistir la configuración en Oracle y resolver la duración en PHP al consultar, cotizar y crear reservas. Restringir los cambios al rol ADMINISTRADOR.
-
-## Guías para conectar el backend
-
-- [Reservas web y cuenta de cliente](RESERVAS_ORACLE.md)
-- [Inscripciones a torneos](TORNEOS_ORACLE.md)
-- [Mapa general e instrucciones para el agente de integración](INTEGRACION_BACKEND.md)
+Para conectar el sistema, sigue la [guía principal](INTEGRACION_BACKEND.md), el [contrato de reservas](RESERVAS_ORACLE.md) y el [contrato de torneos](TORNEOS_ORACLE.md).

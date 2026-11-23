@@ -18,12 +18,11 @@ function reservationStateLabel(row) {
 function reservationActionsMenu(row) {
   if (isTournament(row)) return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end"><li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li></ul></div>`;
   const editable = ['pending', 'confirmed'].includes(row.status);
-  const payment = paymentSummary(row);
   return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end">
     <li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li>
-    ${row.status === 'pending' && !conflicts(row).length ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Confirmar</button></li>` : ''}
+    ${canConfirmReservation(row) && !conflicts(row).length ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Confirmar</button></li>` : ''}
     ${editable ? `<li><button class="dropdown-item" data-action="edit-reservation-${row.id}">Editar</button></li>` : ''}
-    ${payment.remaining > 0 && row.status !== 'cancelled' ? `<li><button class="dropdown-item" data-action="payment-reservation-${row.id}">Registrar pago</button></li>` : ''}
+    ${canRegisterReservationPayment(row) ? `<li><button class="dropdown-item" data-action="payment-reservation-${row.id}">Registrar pago</button></li>` : ''}
     ${editable ? `<li><hr class="dropdown-divider"></li><li><button class="dropdown-item text-danger" data-action="ask-cancel-${row.id}">Cancelar reserva</button></li>` : ''}
     <li><button class="dropdown-item text-danger" data-action="ask-delete-reservation-${row.id}">Borrar de la maqueta</button></li>
   </ul></div>`;
@@ -31,10 +30,11 @@ function reservationActionsMenu(row) {
 function normalRows() {
   return reservations.filter(row => row.status !== 'maintenance');
 }
+const canConfirmReservation = row => row.status === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR';
 const clientForReservation = row => demoClients.find(client => client.id === row.clientId) ||
   demoClients.find(client => client.name === row.client);
 function overlaps(a, b) {
-  return a.id !== b.id && a.court === b.court && a.date === b.date &&
+  return a.id !== b.id && courtsShareSpace(a.court, b.court) && a.date === b.date &&
     a.status !== 'cancelled' && b.status !== 'cancelled' && a.start < b.end && a.end > b.start;
 }
 function conflicts(row) {
@@ -60,7 +60,7 @@ function reservationDetailPanel(row) {
   const payment = paymentSummary(row);
   const conflict = conflicts(row).length > 0;
   const editable = ['pending', 'confirmed'].includes(row.status) && !isTournament(row);
-  const actions = row.status === 'pending' && !conflict ? button(`confirm-${row.id}`, 'Confirmar reserva', 'btn-accent w-100') : '';
+  const actions = canConfirmReservation(row) && !conflict ? button(`confirm-${row.id}`, 'Confirmar reserva', 'btn-accent w-100') : '';
   return card('Detalle de reserva', `<div class="card-body reservation-detail">
     <div class="d-flex justify-content-between gap-2 align-items-start"><strong class="fs-5">${label(row)}</strong>${reservationStateLabel(row)}</div>
     ${conflict ? `<div class="alert alert-danger py-2 mt-3 mb-0 small">${icon('exclamation-triangle-fill')} Hay un cruce de horario que requiere revisión.</div>` : ''}
@@ -72,11 +72,10 @@ function reservationDetailPanel(row) {
       <dt>${icon('dribbble')} Modalidad</dt><dd>${escapeHtml(row.modality || (isTournament(row) ? tournaments[row.tournamentId].sport : sport))}</dd>
       <dt>${icon('share')} Origen</dt><dd>${row.origin}</dd>
       <dt>${icon('cash-stack')} Total</dt><dd>${money.format(row.amount)}</dd>
-      ${row.priceMode === 'manual' ? `<dt>Precio manual</dt><dd>${escapeHtml(row.priceReason)}</dd>` : ''}
       <dt>${icon('credit-card')} Pago</dt><dd><span class="status ${payment.className}">${payment.label}</span></dd>
     </dl>
-    ${row.payments?.length ? `<div class="payment-history"><strong>Historial de pagos</strong>${row.payments.map(paymentItem => `<span>${money.format(paymentItem.amount)} · ${escapeHtml(paymentItem.method)}${paymentItem.voided ? ' · Anulado' : ''}</span>`).join('')}</div>` : ''}
-    <div class="d-grid gap-2 mt-3">${actions}${editable ? button(`edit-reservation-${row.id}`, `${icon('pencil')} Editar reserva`, 'btn btn-light border') : ''}${payment.remaining > 0 && row.status !== 'cancelled' ? button(`payment-reservation-${row.id}`, `${icon('credit-card')} Registrar pago`, 'btn btn-light border') : ''}${editable ? button(`ask-cancel-${row.id}`, 'Cancelar reserva', 'btn btn-outline-danger') : ''}</div>
+    ${row.payment ? `<div class="payment-history"><strong>Pago registrado</strong><span>${money.format(row.payment.amount)} · ${escapeHtml(row.payment.method)}${row.payment.voided ? ' · Anulado' : ''}</span></div>` : ''}
+    <div class="d-grid gap-2 mt-3">${actions}${editable ? button(`edit-reservation-${row.id}`, `${icon('pencil')} Editar reserva`, 'btn btn-light border') : ''}${canRegisterReservationPayment(row) ? button(`payment-reservation-${row.id}`, `${icon('credit-card')} Registrar pago`, 'btn btn-light border') : ''}${editable ? button(`ask-cancel-${row.id}`, 'Cancelar reserva', 'btn btn-outline-danger') : ''}</div>
   </div>`);
 }
 function reservationsView() {
@@ -196,7 +195,7 @@ function reservationDetails(id) {
   }
   const crossings = conflicts(row);
   const actions = ['pending', 'confirmed'].includes(row.status)
-    ? `<div class="d-flex flex-wrap gap-2">${row.status === 'pending' && !crossings.length ? button(`confirm-${id}`, 'Confirmar reserva', 'btn-accent') : ''}${button(`ask-cancel-${id}`, 'Cancelar reserva', 'btn-outline-danger')}</div>`
+    ? `<div class="d-flex flex-wrap gap-2">${canConfirmReservation(row) && !crossings.length ? button(`confirm-${id}`, 'Confirmar reserva', 'btn-accent') : ''}${button(`ask-cancel-${id}`, 'Cancelar reserva', 'btn-outline-danger')}</div>`
     : '';
   const warning = crossings.length ? `<div class="alert alert-danger"><strong>${icon('exclamation-triangle-fill')} Conflicto en esta instalación</strong>
     <p class="small mb-2">Los horarios de estas reservas se cruzan en la misma cancha. Cancela una de las reservas para liberar el bloque.</p>
@@ -264,7 +263,7 @@ function editReservation(id) {
     <div class="col-12"><label class="form-label">Fecha<input class="form-control" type="date" name="date" value="${row.date}" required></label></div>
     <div class="col-6">${clockField("start", "Inicio", row.start)}</div>
     <div class="col-6">${clockField("end", "Término", row.end, { end: true })}</div>
-    ${reservationPricingFields(row)}<p id="edit-reservation-error" class="text-danger small mb-0" role="alert"></p>
+    ${reservationPricingFields()}<p id="edit-reservation-error" class="text-danger small mb-0" role="alert"></p>
     <div class="d-flex justify-content-end"><button class="btn btn-accent">Guardar cambios</button></div></form>`);
   updateReservationQuote($('edit-reservation-form'));
 }
@@ -297,44 +296,28 @@ function saveReservationEdit(form) {
   selectedReservationId = row.id;
   save(`Reserva ${label(row)} actualizada.`);
 }
-function reservationPricingFields(row = null) {
+function reservationPricingFields() {
   return '<div class="col-12"><div class="border rounded p-3 pricing-box"><h3 class="h6">Precio de la reserva</h3>' +
-    editSelect('priceMode', 'Cálculo', [
-      ...(row ? [['keep', 'Conservar el precio acordado']] : []),
-      ['automatic', 'Tarifa del catálogo'], ['manual', 'Total manual']
-    ], row ? 'keep' : 'automatic') +
-    '<div data-manual-price hidden>' + field('manualAmount', 'Total manual (CLP)', row?.amount,
-      'type="number" min="1" max="999999999" step="1"') +
-    field('priceReason', 'Motivo del ajuste', row?.priceReason, 'maxlength="200"') + '</div>' +
     '<output class="fw-semibold" data-price-preview aria-live="polite"></output></div></div>';
 }
 
 function reservationQuote(values, row = null) {
   const court = Number(values.court);
-  const changed = row && (row.court !== court || row.date !== values.date || row.start !== values.start ||
-    row.end !== values.end || (row.modality || courtModes(row.court)[0]) !== values.modality);
   if (!values.date || !validClock(values.start) || !validClock(values.end, true) || values.start >= values.end ||
       !courtModes(court).includes(values.modality)) return { error: 'Selecciona instalación, modalidad, fecha y horario válidos.' };
-  if (values.priceMode === 'keep' && row) {
-    return changed ? { error: 'Al cambiar cancha, modalidad u horario, selecciona una tarifa o un total manual.' } :
-      { amount: row.amount, priceMode: row.priceMode || 'legacy', tariffIds: row.tariffIds, priceReason: row.priceReason };
+  if (row && row.court === court && row.date === values.date && row.start === values.start &&
+      row.end === values.end && (row.modality || courtModes(row.court)[0]) === values.modality) {
+    return { amount: row.amount, tariffIds: row.tariffIds };
   }
-  if (!bookingWithinHours(court, values.date, values.start, values.end)) return { error: 'El bloque queda fuera del horario de apertura del recinto.' };
-  if (values.priceMode === 'manual') {
-    const amount = Number(values.manualAmount);
-    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 999999999 || !values.priceReason?.trim()) {
-      return { error: 'Ingresa un total manual positivo y el motivo del ajuste.' };
-    }
-    return { amount, priceMode: 'manual', priceReason: values.priceReason.trim(), tariffIds: [] };
+  if (!bookingUsesHourlyBlocks(court, values.date, values.start, values.end)) {
+    return { error: 'Elige bloques consecutivos de una hora dentro del horario del recinto.' };
   }
   return automaticQuote(court, values.modality, values.date, values.start, values.end) ||
-    { error: 'No hay tarifa activa para todo el bloque. Revisa Tarifas o ingresa un total manual.' };
+    { error: 'No hay tarifa activa para todo el horario. Revisa Tarifas.' };
 }
 
 function updateReservationQuote(form) {
   const row = reservations.find(row => row.id === Number(form.dataset.reservationId));
-  const manual = form.elements.priceMode.value === 'manual';
-  form.querySelector('[data-manual-price]').hidden = !manual;
   const quote = reservationQuote(Object.fromEntries(new FormData(form)), row);
   const preview = form.querySelector('[data-price-preview]');
   preview.classList.toggle('text-danger', Boolean(quote.error));

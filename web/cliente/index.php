@@ -9,7 +9,6 @@ require __DIR__ . '/demo.php';
 require __DIR__ . '/http.php';
 require __DIR__ . '/reservas.php';
 require __DIR__ . '/torneos.php';
-require __DIR__ . '/../includes/portal-duration.php';
 require __DIR__ . '/../includes/portal-inbox.php';
 require __DIR__ . '/../includes/tournament-store.php';
 date_default_timezone_set('America/Santiago');
@@ -20,14 +19,13 @@ ini_set('session.use_strict_mode', '1');
 session_start();
 header('Cache-Control: no-store');
 
-$portalDurations = loadPortalDurations();
 $tournamentStore = new TournamentStore();
 try {
     $tournamentCatalog = $tournamentStore->catalog();
 } catch (RuntimeException | JsonException) {
     $tournamentCatalog = null;
 }
-$portal = new DemoPortal($_SESSION['data'] ?? [], date('Y-m-d'), date('H:i'), $portalDurations);
+$portal = new DemoPortal($_SESSION['data'] ?? [], date('Y-m-d'), date('H:i'));
 if ($tournamentCatalog !== null) $portal->useTournamentBlocks($tournamentCatalog);
 $views = ['inicio', 'buscar', 'horarios', 'acceso', 'registro', 'revisar', 'comprobante', 'reservas', 'detalle', 'cuenta', 'ayuda', ...TOURNAMENT_VIEWS];
 $view = is_string($_GET['vista'] ?? null) && in_array($_GET['vista'], $views, true) ? $_GET['vista'] : 'inicio';
@@ -46,8 +44,11 @@ if ($profile) {
     }
 }
 $portal->syncRequestReviews($reviews);
-$awaitingFirst = $profile && $portal->awaitingFirstConfirmation($user);
-$filter = $_SESSION['filter'] ?? ['mode' => 'padel', 'date' => $portal->sampleDate(), 'site' => ''];
+$portal->useRequestBlocks($reviews);
+$filter = $_SESSION['filter'] ?? ['mode' => 'padel', 'date' => $portal->sampleDate(), 'site' => 'rastras', 'blocks' => 1];
+$filter['mode'] = isset(DemoPortal::MODES[$filter['mode']]) ? $filter['mode'] : 'padel';
+$filter['site'] = 'rastras';
+$filter['blocks'] ??= 1;
 unset($filter['duration']);
 $selection = $_SESSION['selection'] ?? null;
 $return = $_SESSION['return'] ?? 'inicio';
@@ -119,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         $_SESSION = [];
         session_regenerate_id(true);
-        $portal = new DemoPortal([], date('Y-m-d'), date('H:i'), $portalDurations);
+        $portal = new DemoPortal([], date('Y-m-d'), date('H:i'));
         if ($tournamentCatalog !== null) $portal->useTournamentBlocks($tournamentCatalog);
         go('inicio', 'La demo se reinició.', 'success');
     }
@@ -129,7 +130,10 @@ if (in_array($view, ['reservas', 'detalle', 'cuenta', 'revisar'], true) && !$pro
     $_SESSION['return'] = $view === 'detalle' ? 'reservas' : $view;
     go('acceso');
 }
-if ($view === 'revisar' && !$selection) go('buscar');
+if ($view === 'revisar') {
+    if (!$selection) go('buscar');
+    if (!$portal->selectionMatches($filter, $selection)) discardReservationSelection();
+}
 if ($view === 'horarios' && $tournamentCatalog === null) go('buscar', 'No pudimos consultar los horarios. Vuelve a intentarlo.');
 if ($view === 'acceso' && ($_GET['desde'] ?? '') === 'menu') {
     $_SESSION['return'] = 'cuenta';

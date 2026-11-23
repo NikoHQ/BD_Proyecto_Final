@@ -2,23 +2,27 @@ const paymentMethods = ['Efectivo', 'Débito', 'Crédito', 'Transferencia'];
 const canManagePayments = () => document.body.dataset.accountRole === 'ADMINISTRADOR';
 
 function paymentRows() {
-  return normalRows().flatMap(row => (row.payments || []).map((payment, index) => ({
-    id: payment.id || (row.id * 1000 + index + 1), row, payment,
-    client: clientForReservation(row), date: payment.date || row.date,
-    status: payment.voided ? 'ANULADO' : 'REGISTRADO'
-  })));
+  return normalRows().filter(row => row.payment).map(row => ({
+    id: row.payment.id || row.id * 1000 + 1, row, payment: row.payment,
+    client: clientForReservation(row), date: row.payment.date || row.date,
+    status: row.payment.voided ? 'ANULADO' : 'REGISTRADO'
+  }));
 }
 function paymentSummary(row) {
-  const payments = row.payments || [];
-  const paid = payments.reduce((total, payment) => total + (payment.voided ? 0 : payment.amount), 0);
+  const paid = row.payment?.voided ? 0 : Number(row.payment?.amount || 0);
   if (row.status === 'cancelled') return { label: 'No aplica', className: 'cancelled', paid, remaining: 0 };
   if (paid >= row.amount && row.amount > 0) return { label: 'Pagado', className: 'completed', paid, remaining: 0 };
-  if (paid > 0) return { label: `Abono ${money.format(paid)}`, className: 'pending', paid, remaining: row.amount - paid };
+  if (paid > 0) return { label: `Registrado · ${money.format(paid)}`, className: 'pending', paid, remaining: row.amount - paid };
+  if (row.payment?.voided) return { label: 'Anulado', className: 'cancelled', paid: 0, remaining: row.amount };
   return { label: 'Pendiente', className: 'pending', paid: 0, remaining: row.amount };
+}
+function canRegisterReservationPayment(row) {
+  return !isTournament(row) && !['cancelled', 'maintenance'].includes(row.status) &&
+    !row.payment && row.amount > 0;
 }
 function openReservationPayment(id) {
   const row = reservations.find(entry => entry.id === id);
-  if (!row || row.status === 'cancelled') return;
+  if (!row || !canRegisterReservationPayment(row)) return;
   const payment = paymentSummary(row);
   showDialog(`Registrar pago · ${label(row)}`, `<form id="reservation-payment-form" data-reservation-id="${id}" class="row g-3">
     <div class="col-12"><p class="mb-0"><strong>Saldo pendiente</strong> ${money.format(payment.remaining)}</p></div>
@@ -29,16 +33,15 @@ function openReservationPayment(id) {
 }
 function saveReservationPayment(form) {
   const row = reservations.find(entry => entry.id === Number(form.dataset.reservationId));
-  if (!row || row.status === 'cancelled') return;
+  if (!row || !canRegisterReservationPayment(row)) return;
   const values = Object.fromEntries(new FormData(form));
   const payment = paymentSummary(row);
   const amount = Number(values.amount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > payment.remaining) {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > payment.remaining || !paymentMethods.includes(values.method)) {
     $('payment-error').textContent = 'El monto debe ser mayor que cero y no superar el saldo pendiente.';
     return;
   }
-  row.payments ||= [];
-  row.payments.push({ amount, method: values.method, date: localClock()[0] });
+  row.payment = { amount, method: values.method, date: localClock()[0] };
   selectedReservationId = row.id;
   save(`Pago de ${money.format(amount)} registrado en la maqueta.`);
 }
@@ -80,8 +83,7 @@ function savePayment(id, data, error) {
   const item = paymentRows().find(payment => payment.id === id);
   if (!item || !canManagePayments() || item.payment.voided) return error('Se requiere permiso de administrador.');
   const amount = Number(data.amount);
-  const others = paymentSummary(item.row).paid - item.payment.amount;
-  if (!Number.isSafeInteger(amount) || amount <= 0 || amount + others > item.row.amount) {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > item.row.amount || !paymentMethods.includes(data.method)) {
     return error('El importe debe ser positivo y no superar el saldo disponible para este pago.');
   }
   Object.assign(item.payment, { id, amount, method: data.method, date: data.date });

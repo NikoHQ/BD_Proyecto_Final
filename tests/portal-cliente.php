@@ -2,7 +2,6 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../web/cliente/demo.php';
-require __DIR__ . '/../web/includes/portal-duration.php';
 
 $service = new DemoPortal([], '2026-11-22', '12:00');
 $filter = ['mode' => 'padel', 'date' => '2026-11-27', 'site' => 'rastras'];
@@ -14,34 +13,27 @@ function check(bool $condition, string $message): void
     if (!$condition) throw new RuntimeException($message);
 }
 check($slot($slots, 'padel-1', '18:00')['total'] === 18000, 'Debe cotizar $18.000 a las 18:00.');
-check($slot($slots, 'padel-1', '17:30')['total'] === 17000, 'Debe prorratear al cruzar las 18:00.');
+check($slot($slots, 'padel-1', '17:30') === null, 'Los bloques empiezan a la hora exacta.');
 check($slot($slots, 'padel-1', '16:00') === null, 'El torneo debe bloquear la cancha.');
 check(count($service->availability(array_replace($filter, ['date' => '2026-11-23']))) === 0, 'El recinto debe estar cerrado el lunes.');
-$tampered = $slot($service->availability(array_replace($filter, ['duration' => 90])), 'padel-1', '18:00');
-check($tampered && $tampered['duration'] === 60, 'El cliente no puede imponer otra duración.');
-$settings = tempnam(sys_get_temp_dir(), 'sgcd-duration-test-');
-if ($settings === false) throw new RuntimeException('No se pudo crear el archivo temporal.');
-try {
-    $modes = array_keys(DemoPortal::MODES);
-    $input = array_fill_keys($modes, '60');
-    $input['padel'] = '90';
-    savePortalDurations($input, $modes, $settings);
-    $durations = loadPortalDurations($settings);
-    check($durations['padel'] === 90, 'La duración debe quedar guardada.');
-    try {
-        savePortalDurations(array_replace($input, ['padel' => '91']), $modes, $settings);
-        throw new RuntimeException('Debe rechazar duraciones fuera del catálogo.');
-    } catch (InvalidArgumentException) {
-        check(loadPortalDurations($settings) === $durations, 'Un cambio inválido debe preservar la configuración.');
-    }
-} finally {
-    unlink($settings);
-}
-$configured = new DemoPortal([], '2026-11-22', '12:00', $durations);
-$slot90 = $slot($configured->availability($filter), 'padel-1', '18:00');
-check($slot90 && $slot90['end'] === '19:30' && $slot90['total'] === 27000, 'Debe respetar 90 minutos.');
+$twoHours = array_replace($filter, ['blocks' => 2]);
+$long = $service->quote($twoHours, 'padel-1', '17:00');
+check($long && $long['end'] === '19:00' && $long['total'] === 34000 && $long['blocks'] === 2,
+    'Dos bloques consecutivos suman la tarifa de cada franja.');
+check($service->quote($twoHours, 'padel-1', '15:00') === null, 'Un bloque intermedio ocupado invalida todo el intervalo.');
+check($service->quote($twoHours, 'padel-1', '21:00') === null, 'El intervalo completo debe terminar antes del cierre.');
+check($service->quote($filter, 'padel-1', '08:00') !== null, 'El horario publicado comienza a las ocho.');
+check($service->availability(array_replace($filter, ['blocks' => 0])) === [], 'La cantidad debe ser positiva.');
+check($service->availability(array_replace($filter, ['blocks' => '2'])) === [], 'La búsqueda espera una cantidad entera ya validada.');
+$stale = $long;
+unset($stale['blocks']);
+check($service->create('demo', $twoHours, $stale, 'old')['error'] === 'SELECTION_CHANGED',
+    'Una selección guardada antes del cambio de bloques se debe elegir de nuevo.');
+check($service->create('demo', $filter, $long, 'different')['error'] === 'SELECTION_CHANGED',
+    'El intervalo cotizado debe coincidir con la cantidad buscada.');
+check($service->create('demo', array_replace($twoHours, ['date' => '2026-11-28']), $long, 'different-day')['error']
+    === 'SELECTION_CHANGED', 'Cambiar la fecha invalida una cotización anterior.');
 $selected = $slot($slots, 'padel-1', '18:00');
-check($configured->create('demo', $filter, $selected, 'stale')['error'] === 'DURATION_CHANGED', 'Un cambio de duración exige volver a elegir.');
 $created = $service->create('demo', $filter, $selected, 'test-1');
 check($created['booking']['status'] === 'PENDIENTE', 'Una solicitud web debe quedar pendiente.');
 check($service->create('demo', $filter, $selected, 'test-1')['booking']['code'] === $created['booking']['code'], 'Reintentar no debe duplicar.');
@@ -53,14 +45,13 @@ $next = $slot($service->availability($filter), 'padel-2', '18:00');
 $firstBooking = $service->create('nuevo', $filter, $first, 'new-1')['booking'];
 check($service->detail('nuevo', $firstBooking['code']) !== null, 'La cuenta nueva puede abrir su primera reserva.');
 check($service->create('nuevo', $filter, $first, 'new-1')['booking'] === $firstBooking, 'Reintentar la primera reserva debe ser idempotente.');
-check($service->create('nuevo', $filter, $next, 'new-2')['error'] === 'FIRST_RESERVATION_PENDING', 'Solo se permite una solicitud hasta la primera confirmación.');
-check($service->cancel('nuevo', $firstBooking['code']), 'La cuenta nueva puede cancelar la solicitud.');
-$replacement = $service->create('nuevo', $filter, $next, 'new-3')['booking'];
-check($replacement['status'] === 'PENDIENTE', 'Una primera solicitud cancelada se puede reemplazar.');
-$service->syncRequestReviews(['new-3' => ['status' => 'CONFIRMADA', 'confirmed' => true]]);
-check($service->detail('nuevo', $replacement['code'])['status'] === 'CONFIRMADA', 'La confirmación del personal se refleja en el portal.');
-check($service->cancel('nuevo', $replacement['code']), 'Se puede cancelar después de confirmar.');
-check(isset($service->create('nuevo', $filter, $first, 'new-4')['booking']), 'Una primera confirmación previa desbloquea solicitudes posteriores.');
+$secondBooking = $service->create('nuevo', $filter, $next, 'new-2')['booking'] ?? null;
+check($secondBooking && $secondBooking['status'] === 'PENDIENTE', 'Una cuenta nueva puede enviar otra reserva sin aprobación previa.');
+$service->syncRequestReviews(['new-2' => ['status' => 'CONFIRMADA']]);
+check($service->detail('nuevo', $secondBooking['code'])['status'] === 'CONFIRMADA', 'La aprobación se refleja en la reserva seleccionada.');
+check($service->detail('nuevo', $firstBooking['code'])['status'] === 'PENDIENTE', 'La otra reserva sigue pendiente de aprobación.');
+check($service->cancel('nuevo', $firstBooking['code']), 'El cliente puede cancelar una solicitud pendiente.');
+check(isset($service->create('nuevo', $filter, $first, 'new-3')['booking']), 'Cancelar debe liberar el horario.');
 check($service->cancel('demo', $created['booking']['code']), 'El cliente puede cancelar su próxima reserva.');
 check($slot($service->availability($filter), 'padel-1', '18:00') !== null, 'Cancelar debe liberar la cancha.');
 $service->scenario = 'PRICE_CHANGED';
@@ -75,4 +66,43 @@ check($scheduled->quote($filter, 'padel-1', '18:00') === null, 'La cancha del to
 check($scheduled->quote($filter, 'padel-2', '18:00') !== null, 'La otra cancha conserva su disponibilidad.');
 $scheduled->useTournamentBlocks([]);
 check($scheduled->quote($filter, 'padel-1', '16:00') !== null, 'La agenda compartida sustituye el bloque de torneo de ejemplo.');
+$football = ['mode' => 'futbol', 'date' => $filter['date'], 'site' => 'rastras', 'blocks' => 2];
+$courts = array_column($scheduled->availability($football), 'court', 'court');
+check(count($courts) === 7, 'El catálogo de fútbol debe ofrecer seis canchas y la cancha grande.');
+check(array_keys(DemoPortal::SITES) === ['rastras'] && isset(DemoPortal::MODES['tenis']) && !isset(DemoPortal::MODES['voley']),
+    'La oferta debe limitarse a Las Rastras y a los deportes del modelo.');
+$small = $scheduled->quote($football, 'futbol-2', '17:00');
+$large = $scheduled->quote($football, 'futbol-grande', '18:00');
+check($small && $large, 'Ambas cotizaciones existen antes de reservar.');
+check(isset($scheduled->create('demo', $football, $small, 'small')['booking']), 'Debe guardar los dos bloques de la cancha 2.');
+check($scheduled->create('demo', $football, $large, 'large-stale')['error'] === 'SLOT_TAKEN',
+    'El guardado debe detectar el solape en el primer bloque de la cancha grande.');
+check($scheduled->quote($football, 'futbol-1', '18:00') !== null, 'Las canchas pequeñas no se bloquean entre ellas.');
+$large = $scheduled->quote($football, 'futbol-grande', '19:00');
+$largeBooking = $scheduled->create('demo', $football, $large, 'large')['booking'] ?? null;
+check($largeBooking && $largeBooking['total'] === 110000 && $largeBooking['end'] === '21:00',
+    'El horario adyacente se puede reservar y conserva su precio total.');
+foreach (range(1, 6) as $number) {
+    check(($scheduled->quote($football, 'futbol-' . $number, '19:00') === null) === ($number <= 3),
+        'Solo las canchas 1 a 3 comparten espacio con la cancha grande.');
+}
+$scheduled->useTournamentBlocks([[
+    'state' => 'PLANIFICADO', 'site' => 'Las Rastras', 'blocks' => [[
+        'courtName' => 'Fútbol 6 · Cancha 3', 'date' => $filter['date'], 'start' => '10:00', 'end' => '11:00',
+    ]],
+]]);
+check($scheduled->quote($football, 'futbol-grande', '09:00') === null, 'Un torneo en la cancha 3 bloquea el segundo tramo de la grande.');
+$scheduled->useRequestBlocks(['other-session' => [
+    'courtName' => 'Cancha grande', 'site' => 'rastras', 'date' => $filter['date'],
+    'start' => '12:00', 'end' => '14:00', 'status' => 'PENDIENTE',
+]]);
+check($scheduled->quote($football, 'futbol-3', '11:00') === null, 'Una solicitud de otra sesión bloquea las canchas que ocupa.');
+check($scheduled->quote($football, 'futbol-6', '11:00') !== null, 'Una solicitud de otra sesión no afecta a la cancha 6.');
+$scheduled->useRequestBlocks(['cancelled-elsewhere' => [
+    'courtName' => 'Cancha grande', 'site' => 'rastras', 'date' => $filter['date'],
+    'start' => '12:00', 'end' => '14:00', 'status' => 'CANCELADA',
+]]);
+check($scheduled->quote($football, 'futbol-3', '11:00') !== null, 'Cancelar en otra sesión libera los bloques compartidos.');
+check(DemoPortal::siteName('parque') === 'Parque Sur'
+    && DemoPortal::bookingMode(['mode' => 'voley']) === 'Vóleibol 6x6', 'Se conservan los datos de reservas antiguas.');
 echo "Servicio del portal verificado.\n";

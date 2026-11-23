@@ -2,29 +2,31 @@
 const statuses = { pending: 'Pendiente', confirmed: 'Confirmada', completed: 'Completada', cancelled: 'Cancelada', maintenance: 'Mantención' };
 const statusIcons = { pending: 'hourglass-split', confirmed: 'check-circle', completed: 'check2-all', cancelled: 'x-circle', maintenance: 'tools' };
 const courts = [
-  ['Fútbol 7', 'Las Rastras', 'Fútbol 7', 24000],
-  ['Fútbol 5', 'Las Rastras', 'Fútbol 5', 19000],
-  ['Pádel 1', 'Las Rastras', 'Pádel dobles', 15000],
-  ['Gimnasio multiuso', 'Las Rastras', 'Básquetbol 5x5', 22000],
-  ['Cancha de vóleibol', 'La Florida', 'Vóleibol 6x6', 16000],
-  ['Sala de entrenamiento', 'La Florida', 'Entrenamiento funcional', 8000]
+  ...Array.from({length: 6}, (_, index) => [`Fútbol 6 · Cancha ${index + 1}`, 'Las Rastras', 'Fútbol 6', 18000, 22000]),
+  ['Cancha grande', 'Las Rastras', 'Fútbol 6', 45000, 55000],
+  ['Pádel 1', 'Las Rastras', 'Pádel dobles', 16000, 18000],
+  ['Pádel 2', 'Las Rastras', 'Pádel dobles', 16000, 17000],
+  ['Tenis 1', 'Las Rastras', 'Tenis', 14000, 16000]
 ];
+const largeCourt = 6;
+const largeCourtComponents = [0, 1, 2];
+function courtsShareSpace(a, b) {
+  return a === b || (a === largeCourt && largeCourtComponents.includes(b)) ||
+    (b === largeCourt && largeCourtComponents.includes(a));
+}
 const demoRows = [
   [0, 'Club Los Pinos', '08:00', '10:00', 'completed'],
   [0, 'Deportivo Austral', '11:00', '13:00', 'confirmed'],
-  [0, 'Rayo Norte', '18:00', '20:00', 'pending'],
-  [1, 'Escuela Municipal', '09:00', '11:00', 'completed'],
+  [1, 'Escuela Municipal', '09:00', '10:00', 'completed'],
   [1, 'Unión Talca', '17:00', '19:00', 'confirmed'],
-  [2, 'Amigos del Pádel', '08:30', '10:30', 'confirmed'],
-  [2, 'Camila Rojas', '13:00', '15:00', 'pending'],
-  [2, 'Pádel Oriente', '19:00', '21:00', 'confirmed'],
-  [3, 'Los Halcones', '10:00', '12:00', 'confirmed'],
-  [3, 'Mantención', '14:00', '16:00', 'maintenance'],
-  [3, 'Taller deportivo', '17:00', '19:00', 'pending'],
-  [4, 'Club La Florida', '11:00', '13:00', 'confirmed'],
-  [5, 'Entrenamiento grupal', '09:00', '11:00', 'completed'],
-  [3, 'Escuela de básquetbol', '18:30', '19:30', 'pending'],
-  [2, 'Pádel Sur', '16:00', '16:45', 'cancelled']
+  [3, 'Rayo Norte', '18:00', '20:00', 'pending'],
+  [4, 'Los Halcones', '10:00', '12:00', 'confirmed'],
+  [5, 'Taller deportivo', '17:00', '19:00', 'pending'],
+  [6, 'Deportivo Austral', '20:00', '21:00', 'confirmed'],
+  [7, 'Amigos del Pádel', '09:00', '11:00', 'confirmed'],
+  [7, 'Camila Rojas', '13:00', '14:00', 'pending'],
+  [8, 'Pádel Oriente', '19:00', '21:00', 'confirmed'],
+  [9, 'Valentina Muñoz', '11:00', '12:00', 'confirmed']
 ];
 const demoClients = [
   { id: 1, name: 'Camila Rojas', rut: '12345678-5', phone: '+56 9 6123 4590', email: 'camila.rojas@demo.cl', type: 'Persona' },
@@ -42,7 +44,7 @@ const demoClients = [
   { id: 13, name: 'Club La Florida', rut: '76567890-1', phone: '+56 9 3345 6712', email: 'contacto@clublaflorida.demo.cl', type: 'Organización' },
   { id: 14, name: 'Entrenamiento grupal', rut: '77456789-6', phone: '+56 9 2456 7823', email: 'info@entrenamientogrupal.demo.cl', type: 'Organización' }
 ];
-const siteRecords = [
-  { id: 1, key: 'Las Rastras', name: 'Las Rastras', district: 'Talca', address: 'Sector Las Rastras', status: 'ACTIVO' },
-  { id: 2, key: 'La Florida', name: 'La Florida', district: 'Talca', address: 'Sector La Florida', status: 'ACTIVO' }
-];
+const siteRecords = [{
+  id: 1, key: 'Las Rastras', name: 'Las Rastras', district: 'Talca', address: 'Sector Las Rastras',
+  status: 'ACTIVO', hours: [null, ...Array.from({length: 5}, () => ['08:00', '22:00']), ['08:00', '20:00']]
+}];

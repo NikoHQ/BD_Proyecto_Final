@@ -8,8 +8,8 @@ function badge(string $status): string
 function summary(array $slot, string $title = 'Resumen de reserva'): void
 {
     $items = [
-        'bullseye' => ['Modalidad', DemoPortal::MODES[$slot['mode']]['label']],
-        'geo-alt' => ['Recinto y cancha', DemoPortal::SITES[$slot['site']] . ' · ' . $slot['courtName']],
+        'bullseye' => ['Modalidad', DemoPortal::bookingMode($slot)],
+        'geo-alt' => ['Recinto y cancha', DemoPortal::siteName($slot['site']) . ' · ' . $slot['courtName']],
         'calendar3' => ['Fecha', dateLabel($slot['date'])],
         'clock' => ['Horario', $slot['start'] . '–' . $slot['end']],
         'hourglass-split' => ['Duración', ($slot['duration'] ?? (int) ((strtotime($slot['end']) - strtotime($slot['start'])) / 60)) . ' minutos'],

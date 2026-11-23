@@ -40,12 +40,39 @@ document.querySelectorAll('[data-tournament-roster]').forEach(form => {
     const count = form.querySelector('[data-tournament-count]');
     if (!count) return;
 
-    const players = Array.from(form.querySelectorAll('[data-tournament-player]'));
+    const list = form.querySelector('[data-tournament-players]');
+    const add = form.querySelector('[data-tournament-add]');
+    const template = form.querySelector('[data-tournament-player-template]');
+    const maximum = Number(form.dataset.rosterMaximum);
     const update = () => {
+        const players = Array.from(list.children);
+        players.forEach((row, index) => {
+            row.querySelector('[data-player-legend]').textContent = 'Compañero ' + (index + 1);
+        });
         const filled = players.filter(row => Array.from(row.querySelectorAll('input')).every(field => field.value.trim() !== ''));
         const total = String(filled.length + 1);
         if (count.textContent !== total) count.textContent = total;
+        add.disabled = players.length + 1 >= maximum;
     };
-    form.addEventListener('input', update);
+
+    add.addEventListener('click', () => {
+        if (list.children.length + 1 >= maximum) return;
+        const row = template.content.firstElementChild.cloneNode(true);
+        list.append(row);
+        update();
+        row.querySelector('input').focus();
+    });
+    list.addEventListener('click', event => {
+        const remove = event.target.closest('[data-tournament-remove]');
+        if (!remove) return;
+        const row = remove.closest('[data-tournament-player]');
+        const next = row.nextElementSibling || row.previousElementSibling;
+        row.remove();
+        update();
+        if (next) next.querySelector('input').focus();
+        else if (!add.hidden) add.focus();
+        else form.querySelector('button[type="submit"]')?.focus();
+    });
+    list.addEventListener('input', update);
     update();
 });

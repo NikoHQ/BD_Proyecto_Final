@@ -23,7 +23,7 @@ function timeline(rows, visibleCourts, day = date, tournamentId = null) {
   const tracks = visibleCourts.map(court => {
     const [name, site, sport] = courts[court];
     const lanes = [];
-    const events = rows.filter(row => row.court === court).map(row => {
+    const events = rows.filter(row => row.court === court || (row.status !== 'cancelled' && courtsShareSpace(row.court, court))).map(row => {
       let lane = lanes.findIndex(end => end <= row.start);
       if (lane === -1) lane = lanes.length;
       lanes[lane] = row.end;
@@ -32,7 +32,9 @@ function timeline(rows, visibleCourts, day = date, tournamentId = null) {
       const width = duration * 100 / durationGrid;
       const conflict = conflicts(row).length > 0;
       const tournament = isTournament(row);
-      const title = tournament && tournamentId === row.tournamentId ? row.activity : row.client;
+      const shared = row.court !== court;
+      const title = shared ? 'Ocupada por ' + courts[row.court][0]
+        : (tournament && tournamentId === row.tournamentId ? row.activity : row.client);
       const activeBlock = isActiveTournamentBlock(row);
       const eventClass = activeBlock ? 'tournament-block' : row.status;
       const modality = row.modality || (tournament ? tournaments[row.tournamentId].sport : sport);
@@ -86,7 +88,7 @@ function agenda(dayRows, visibleCourts) {
     const conflict = conflicts(row).length > 0;
     return `<div class="queue-item"><div class="d-flex flex-wrap justify-content-between gap-1"><strong>${escapeHtml(row.client)}</strong><span class="expiry small fw-semibold" data-expires="${deadlines.get(row.id)}"></span></div>
       <div class="small text-secondary mb-2">${row.start} · ${escapeHtml(courts[row.court][0])}</div>
-      <div class="d-flex flex-wrap gap-2">${conflict ? button(`resolve-${row.id}`, `${icon('exclamation-triangle')} Resolver cruce`, 'btn-outline-danger btn-sm') : button(`confirm-${row.id}`, 'Confirmar', 'btn-accent btn-sm')}${button(`ask-cancel-${row.id}`, 'Cancelar', 'btn-outline-secondary btn-sm')}</div></div>`;
+      <div class="d-flex flex-wrap gap-2">${conflict ? button(`resolve-${row.id}`, `${icon('exclamation-triangle')} Resolver cruce`, 'btn-outline-danger btn-sm') : canConfirmReservation(row) ? button(`confirm-${row.id}`, 'Confirmar', 'btn-accent btn-sm') : ''}${button(`ask-cancel-${row.id}`, 'Cancelar', 'btn-outline-secondary btn-sm')}</div></div>`;
   }).join('');
   const venueOptions = selectOption('', 'Todos los recintos', !venue) +
     siteRecords.map(site => selectOption(site.key, site.name, venue === site.key)).join('');
@@ -102,7 +104,7 @@ function agenda(dayRows, visibleCourts) {
         <div class="card-body border-bottom agenda-tools"><div class="toolbar">${dateControls()}<select id="venue" class="form-select" aria-label="Filtrar por recinto">${venueOptions}</select>
         <input type="search" id="court-query" class="form-control court-search" aria-label="Buscar instalación" placeholder="Buscar instalación" value="${escapeHtml(courtQuery)}"></div>
         <div class="d-flex flex-wrap justify-content-between gap-2 mt-2"><strong class="small agenda-date">${dateLabel.format(new Date(date + 'T12:00:00'))}</strong><div class="legend">${Object.keys(statuses).map(badge).join('')}${tournamentBadge()}</div></div></div>
-        ${timeline(dayRows, visibleCourts)}${visibleCourts.length && !dayRows.length ? '<p class="empty">No hay reservas ni mantenciones para esta selección.</p>' : ''}`)}</div>
+        ${timeline(dayRows, visibleCourts)}${visibleCourts.length && !dayRows.length ? '<p class="empty">No hay reservas para esta selección.</p>' : ''}`)}</div>
       <div class="col-12 col-xl-3">${card('Reservas por confirmar', `<div class="card-body py-1">${list || '<p class="empty px-0">Todo al día para esta selección.</p>'}</div>`)}</div>
     </div>
     <div class="row"><div class="col-12">${card('Próximos torneos', `<div class="card-body">${tournamentCards(false)}</div>`, '<a class="btn btn-sm btn-light border ms-auto" href="#torneos">Ir a torneos <i class="bi bi-arrow-right" aria-hidden="true"></i></a>')}</div></div>`;

@@ -71,7 +71,7 @@ function render() {
     const visible = courts.flatMap(([name, site], index) =>
       !courtMeta[index]?.deleted && (!venue || site === venue) && `${name} ${siteName(site)}`.toLowerCase().includes(query) ? [index] : []);
     const scroll = document.querySelector('.agenda-scroll')?.scrollLeft || 0;
-    $('screen').innerHTML = agenda(allBookings().filter(row => row.date === date && visible.includes(row.court)).sort(byTime), visible);
+    $('screen').innerHTML = agenda(allBookings().filter(row => row.date === date && visible.some(court => courtsShareSpace(row.court, court))).sort(byTime), visible);
     const agendaScroll = document.querySelector('.agenda-scroll');
     if (agendaScroll) agendaScroll.scrollLeft = scroll;
     updateClocks();
@@ -264,7 +264,7 @@ document.addEventListener('click', event => {
   const step = /^(confirm|ask-cancel|cancel|resolve)-(\d+)$/.exec(action);
   if (step) {
     const row = reservations.find(r => r.id === Number(step[2]));
-    if (!row) return;
+    if (!row || (step[1] === 'confirm' && !canConfirmReservation(row))) return;
     if (step[1] === 'resolve' || (step[1] === 'confirm' && conflicts(row).length)) return reservationDetails(row.id);
     if (step[1] === 'ask-cancel') return showDialog(`Cancelar ${label(row)}`, `<p>Se liberará el horario de ${escapeHtml(row.client)}.</p><div class="d-flex gap-2">${details(row, 'Volver')}${button(`cancel-${row.id}`, 'Sí, cancelar', 'btn-danger')}</div>`);
     row.status = step[1] === 'confirm' ? 'confirmed' : 'cancelled';
@@ -274,7 +274,7 @@ document.addEventListener('click', event => {
   if (deletion) {
     const row = reservations.find(entry => entry.id === Number(deletion[2]));
     if (!row) return;
-    if (row.payments?.length) return showDialog('Reserva con historial de pagos',
+    if (row.payment) return showDialog('Reserva con historial de pagos',
       '<p>La reserva tiene movimientos asociados. Conserva su historial y usa Cancelar reserva si el estado lo permite.</p>');
     if (deletion[1] === 'ask-delete') {
       return showDialog(`Borrar ${label(row)}`, `<p>Esta acción eliminará la reserva de la maqueta. En el sistema real se debe cancelar y conservar trazabilidad.</p><div class="d-flex flex-wrap justify-content-end gap-2"><button class="btn btn-light border" data-bs-dismiss="modal">Volver</button>${button(`delete-reservation-${row.id}`, 'Borrar de la maqueta', 'btn-danger')}</div>`);

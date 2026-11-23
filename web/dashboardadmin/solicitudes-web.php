@@ -5,7 +5,8 @@ require_once __DIR__ . '/../includes/portal-inbox.php';
 require_once __DIR__ . '/../cliente/demo.php';
 
 authStart();
-requireAccount();
+$account = requireAccount();
+$canConfirm = $account['ROL'] === 'ADMINISTRADOR';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     checkCsrf();
     $status = match (post('action')) {
@@ -13,6 +14,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'cancel' => 'CANCELADA',
         default => '',
     };
+    if ($status === 'CONFIRMADA' && !$canConfirm) {
+        http_response_code(403);
+        exit('Sólo un administrador puede confirmar la reserva.');
+    }
     $key = post('request');
     $_SESSION['portal_review_notice'] = $status !== '' && preg_match('/^[a-f0-9]{32}$/D', $key)
         && reviewPortalRequest($key, $status)
@@ -49,11 +54,11 @@ uasort($pending, static fn(array $a, array $b): int => [$a['date'], $a['start']]
             <tr>
               <th scope="row"><?= esc($request['code']) ?></th>
               <td><?= esc($request['customer']) ?></td>
-              <td><?= esc($request['courtName']) ?> · <?= esc(DemoPortal::SITES[$request['site']]) ?></td>
+              <td><?= esc($request['courtName']) ?> · <?= esc(DemoPortal::siteName($request['site'])) ?></td>
               <td><?= esc($request['date']) ?> · <?= esc($request['start'] . '–' . $request['end']) ?></td>
               <td><form class="d-flex flex-wrap gap-2" method="post">
                 <?= csrfField() ?><input type="hidden" name="request" value="<?= esc($key) ?>">
-                <button class="btn btn-accent btn-sm" name="action" value="confirm">Confirmar reserva</button>
+                <?php if ($canConfirm): ?><button class="btn btn-accent btn-sm" name="action" value="confirm">Confirmar reserva</button><?php endif; ?>
                 <button class="btn btn-outline-danger btn-sm" name="action" value="cancel">Cancelar solicitud</button>
               </form></td>
             </tr>

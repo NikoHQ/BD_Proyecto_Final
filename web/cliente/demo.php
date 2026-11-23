@@ -4,27 +4,38 @@ declare(strict_types=1);
 final class DemoPortal
 {
     public const MODES = [
-        'padel' => ['label' => 'Pádel dobles', 'players' => '2–4 personas', 'icon' => 'bullseye'],
-        'futbol' => ['label' => 'Fútbol 5', 'players' => '5–10 personas', 'icon' => 'dribbble'],
-        'voley' => ['label' => 'Vóleibol 6x6', 'players' => 'Hasta 12 personas', 'icon' => 'circle-half'],
+        'padel' => ['label' => 'Pádel dobles', 'players' => 'Juego en parejas', 'icon' => 'bullseye'],
+        'futbol' => ['label' => 'Fútbol 6', 'players' => 'Canchas individuales o cancha grande', 'icon' => 'dribbble'],
+        'tenis' => ['label' => 'Tenis', 'players' => 'Cancha de demostración', 'icon' => 'circle-half'],
     ];
+    public const SITES = ['rastras' => 'Las Rastras'];
+    public const BLOCK_MINUTES = 60;
+    private const OPEN_HOUR = 8;
+    private const CLOSE_HOUR = 22;
+    public const MAX_BLOCKS = self::CLOSE_HOUR - self::OPEN_HOUR;
     private const DEMO_RUTS = ['demo' => '30900001-3', 'nuevo' => '30900002-1'];
-    public const SITES = ['rastras' => 'Las Rastras', 'parque' => 'Parque Sur'];
+    private const FOOTBALL_COMPONENTS = ['futbol-1', 'futbol-2', 'futbol-3'];
+    private const FOOTBALL_RATES = [18000, 22000];
     private const COURTS = [
-        'padel-1' => ['name' => 'Pádel 1', 'mode' => 'padel', 'site' => 'rastras', 'rates' => [16000, 18000]],
-        'padel-2' => ['name' => 'Pádel 2', 'mode' => 'padel', 'site' => 'rastras', 'rates' => [16000, 17000]],
-        'padel-3' => ['name' => 'Pádel 3', 'mode' => 'padel', 'site' => 'parque', 'rates' => [14000, 15000]],
-        'futbol-1' => ['name' => 'Cancha Fútbol 5', 'mode' => 'futbol', 'site' => 'rastras', 'rates' => [18000, 22000]],
-        'voley-1' => ['name' => 'Cancha Vóleibol', 'mode' => 'voley', 'site' => 'parque', 'rates' => [12000, 14000]],
+        'padel-1' => ['name' => 'Pádel 1', 'mode' => 'padel', 'rates' => [16000, 18000]],
+        'padel-2' => ['name' => 'Pádel 2', 'mode' => 'padel', 'rates' => [16000, 17000]],
+        'futbol-1' => ['name' => 'Fútbol 6 · Cancha 1', 'mode' => 'futbol', 'rates' => self::FOOTBALL_RATES],
+        'futbol-2' => ['name' => 'Fútbol 6 · Cancha 2', 'mode' => 'futbol', 'rates' => self::FOOTBALL_RATES],
+        'futbol-3' => ['name' => 'Fútbol 6 · Cancha 3', 'mode' => 'futbol', 'rates' => self::FOOTBALL_RATES],
+        'futbol-4' => ['name' => 'Fútbol 6 · Cancha 4', 'mode' => 'futbol', 'rates' => self::FOOTBALL_RATES],
+        'futbol-5' => ['name' => 'Fútbol 6 · Cancha 5', 'mode' => 'futbol', 'rates' => self::FOOTBALL_RATES],
+        'futbol-6' => ['name' => 'Fútbol 6 · Cancha 6', 'mode' => 'futbol', 'rates' => self::FOOTBALL_RATES],
+        'futbol-grande' => ['name' => 'Cancha grande', 'mode' => 'futbol', 'rates' => [45000, 55000]],
+        'tenis-1' => ['name' => 'Tenis 1', 'mode' => 'tenis', 'rates' => [14000, 16000]],
     ];
     private array $bookings;
     private array $accounts;
     private array $rates;
     private array $sharedTournamentBlocks = [];
+    private array $sharedRequestBlocks = [];
     public string $scenario = '';
 
-    public function __construct(array $data, public readonly string $today, public readonly string $time,
-        private readonly array $durations = [])
+    public function __construct(array $data, public readonly string $today, public readonly string $time)
     {
         $this->rates = $data['rates'] ?? [];
         $this->scenario = $data['scenario'] ?? '';
@@ -36,12 +47,12 @@ final class DemoPortal
         $friday = $this->sampleDate();
         $this->bookings = $data['bookings'] ?? [
             'R-10451' => $this->seed('R-10451', 'demo', 'padel-2', $day->modify('-7 days')->format('Y-m-d'), '17:00', 'COMPLETADA'),
-            'R-10452' => $this->seed('R-10452', 'demo', 'padel-3', $friday, '20:00', 'CONFIRMADA'),
+            'R-10452' => $this->seed('R-10452', 'demo', 'padel-1', $friday, '20:00', 'CONFIRMADA'),
             'R-10453' => $this->seed('R-10453', 'demo', 'padel-2', $friday, '20:00', 'PENDIENTE'),
-            'R-10454' => $this->seed('R-10454', 'demo', 'padel-3', $day->modify('-2 days')->format('Y-m-d'), '18:00', 'CANCELADA'),
+            'R-10454' => $this->seed('R-10454', 'demo', 'padel-2', $day->modify('-2 days')->format('Y-m-d'), '18:00', 'CANCELADA'),
             'TORNEO' => $this->seed('TORNEO', '', 'padel-1', $friday, '16:00', 'CONFIRMADA'),
-            'MANTENCION' => $this->seed('MANTENCION', '', 'padel-2', $friday, '16:00', 'MANTENCION'),
         ];
+        unset($this->bookings['MANTENCION']);
     }
 
     public function snapshot(): array
@@ -92,44 +103,70 @@ final class DemoPortal
         return null;
     }
 
+    public static function siteName(string $site): string
+    {
+        return self::SITES[$site] ?? ($site === 'parque' ? 'Parque Sur' : $site);
+    }
+
+    public static function bookingMode(array $booking): string
+    {
+        return $booking['modeLabel'] ?? match ($booking['mode']) {
+            'futbol' => ($booking['courtName'] ?? '') === 'Cancha Fútbol 5' ? 'Fútbol 5' : self::MODES['futbol']['label'],
+            'voley' => 'Vóleibol 6x6',
+            default => self::MODES[$booking['mode']]['label'] ?? $booking['mode'],
+        };
+    }
+
     public function validFilter(array $filter): bool
     {
-        if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $filter['date'])) return false;
+        $blocks = $filter['blocks'] ?? 1;
+        if (!is_int($blocks) || $blocks < 1 || $blocks > self::MAX_BLOCKS ||
+            !preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $filter['date'])) return false;
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $filter['date']);
         return $date && $date->format('Y-m-d') === $filter['date'] && $filter['date'] >= $this->today
             && isset(self::MODES[$filter['mode']])
             && ($filter['site'] === '' || isset(self::SITES[$filter['site']]));
     }
 
-    public function durationFor(string $mode): int
-    {
-        return $this->durations[$mode] ?? 60;
-    }
-
     public function availability(array $filter): array
     {
         if (!$this->validFilter($filter)) return [];
-        $duration = $this->durationFor($filter['mode']);
+        $duration = ($filter['blocks'] ?? 1) * self::BLOCK_MINUTES;
         $day = (int) (new DateTimeImmutable($filter['date']))->format('N');
+        if ($day === 1) return [];
+        $close = ($day === 7 ? 20 : self::CLOSE_HOUR) * self::BLOCK_MINUTES;
         $result = [];
         foreach (self::COURTS as $id => $court) {
-            if ($court['mode'] !== $filter['mode'] || ($filter['site'] !== '' && $court['site'] !== $filter['site'])) continue;
-            if ($day === 1 && $court['site'] === 'rastras') continue;
-            $close = $day === 7 ? 20 * 60 : 22 * 60;
-            for ($start = 16 * 60; $start + $duration <= $close; $start += 30) {
+            if ($court['mode'] !== $filter['mode']) continue;
+            for ($start = self::OPEN_HOUR * self::BLOCK_MINUTES; $start + $duration <= $close; $start += self::BLOCK_MINUTES) {
                 $end = $start + $duration;
                 $from = $this->clock($start);
                 $until = $this->clock($end);
                 if (($filter['date'] === $this->today && $from <= $this->time) ||
                     $this->overlaps($id, $filter['date'], $from, $until)) continue;
-                $baseMinutes = max(0, min($end, 18 * 60) - $start);
-                $rates = $court['rates'];
-                $total = ($baseMinutes * $rates[0] + ($duration - $baseMinutes) * $rates[1]) / 60;
-                $result[] = $this->slot($id, $filter['date'], $from, $until, (int) round($total) + ($this->rates[$id] ?? 0));
+                $total = 0;
+                for ($block = $start; $block < $end; $block += self::BLOCK_MINUTES) {
+                    $total += $court['rates'][$block < 18 * self::BLOCK_MINUTES ? 0 : 1] + ($this->rates[$id] ?? 0);
+                }
+                $result[] = $this->slot($id, $filter['date'], $from, $until, $total);
             }
         }
         usort($result, static fn($a, $b) => [$a['start'], $a['court']] <=> [$b['start'], $b['court']]);
         return $result;
+    }
+
+    public function selectionMatches(array $filter, array $selection): bool
+    {
+        if (!$this->validFilter($filter)) return false;
+        $court = self::COURTS[$selection['court'] ?? ''] ?? null;
+        $start = $selection['start'] ?? '';
+        $blocks = $filter['blocks'] ?? 1;
+        $duration = $blocks * self::BLOCK_MINUTES;
+        return $court && $court['mode'] === $filter['mode'] && ($selection['mode'] ?? null) === $filter['mode']
+            && ($selection['site'] ?? null) === 'rastras' && ($selection['date'] ?? null) === $filter['date']
+            && ($selection['blocks'] ?? null) === $blocks && ($selection['duration'] ?? null) === $duration
+            && preg_match('/^(?:[01][0-9]|2[0-3]):00$/D', $start)
+            && ($selection['end'] ?? null) === $this->clock((int) $start * self::BLOCK_MINUTES + $duration);
     }
 
     public function quote(array $filter, string $court, string $start): ?array
@@ -146,9 +183,8 @@ final class DemoPortal
         foreach ($this->bookings as $booking) {
             if ($booking['owner'] === $username && ($booking['request'] ?? null) === $key) return ['booking' => $booking];
         }
-        if ($this->awaitingFirstConfirmation($username)) return ['error' => 'FIRST_RESERVATION_PENDING'];
-        if (($selection['duration'] ?? 60) !== $this->durationFor($filter['mode'])) {
-            return ['error' => 'DURATION_CHANGED'];
+        if (!$this->selectionMatches($filter, $selection)) {
+            return ['error' => 'SELECTION_CHANGED'];
         }
         $scenario = $this->scenario;
         $this->scenario = '';
@@ -161,7 +197,7 @@ final class DemoPortal
         }
         if ($scenario === 'PRICE_CHANGED') {
             $this->rates[$slot['court']] = ($this->rates[$slot['court']] ?? 0) + 2000;
-            $slot['total'] += 2000;
+            $slot['total'] += 2000 * $slot['blocks'];
         }
         if ($slot['total'] !== $selection['total']) return ['error' => 'PRICE_CHANGED', 'quote' => $slot];
         $code = 'R-' . strtoupper(bin2hex(random_bytes(6)));
@@ -176,22 +212,8 @@ final class DemoPortal
             $review = $reviews[$booking['request'] ?? ''] ?? null;
             if ($review !== null) {
                 $booking['status'] = $review['status'];
-                $booking['confirmed'] = $review['confirmed'];
             }
         }
-    }
-
-    public function awaitingFirstConfirmation(string $username): bool
-    {
-        $pending = false;
-        foreach ($this->bookings as $booking) {
-            if ($booking['owner'] !== $username) continue;
-            if (!empty($booking['confirmed']) || in_array($booking['status'], ['CONFIRMADA', 'COMPLETADA'], true)) {
-                return false;
-            }
-            $pending = $pending || $booking['status'] === 'PENDIENTE';
-        }
-        return $pending;
     }
 
     public function history(string $username): ?array
@@ -235,21 +257,53 @@ final class DemoPortal
         foreach ($tournaments as $tournament) {
             if ($tournament['state'] === 'CANCELADO') continue;
             foreach ($tournament['blocks'] as $block) {
-                foreach (self::COURTS as $id => $court) {
-                    if (self::SITES[$court['site']] !== $tournament['site']) continue;
-                    if ($block['courtName'] !== $court['name']
-                        && !($id === 'futbol-1' && $block['courtName'] === 'Fútbol 5')) continue;
-                    $this->sharedTournamentBlocks[] = $block + ['court' => $id, 'status' => 'CONFIRMADA'];
+                $court = self::courtId($block['courtName'], $tournament['site']);
+                if ($court !== null) {
+                    $this->sharedTournamentBlocks[] = $block + ['court' => $court, 'status' => 'CONFIRMADA'];
                 }
             }
         }
     }
 
+    public function useRequestBlocks(array $requests): void
+    {
+        $this->sharedRequestBlocks = [];
+        foreach ($requests as $request) {
+            $court = $request['court'] ?? self::courtId($request['courtName'], self::siteName($request['site']));
+            if ($court !== null) $this->sharedRequestBlocks[] = ['court' => $court] + $request;
+        }
+    }
+
+    private static function courtId(string $name, string $site): ?string
+    {
+        if ($site !== self::SITES['rastras']) return null;
+        if (in_array($name, ['Fútbol 5', 'Cancha Fútbol 5', 'Fútbol 7'], true)) return 'futbol-1';
+        foreach (self::COURTS as $id => $court) {
+            if ($name === $court['name']) return $id;
+        }
+        return null;
+    }
+
+    public static function namedCourtsShareSpace(string $first, string $second, string $site): bool
+    {
+        if ($first === $second) return true;
+        $a = self::courtId($first, $site);
+        $b = self::courtId($second, $site);
+        return $a !== null && $b !== null && self::courtsShareSpace($a, $b);
+    }
+
+    private static function courtsShareSpace(string $a, string $b): bool
+    {
+        return $a === $b
+            || ($a === 'futbol-grande' && in_array($b, self::FOOTBALL_COMPONENTS, true))
+            || ($b === 'futbol-grande' && in_array($a, self::FOOTBALL_COMPONENTS, true));
+    }
+
     private function overlaps(string $court, string $date, string $start, string $end): bool
     {
-        foreach ([...$this->bookings, ...$this->sharedTournamentBlocks] as $booking) {
-            if ($booking['court'] === $court && $booking['date'] === $date && $booking['status'] !== 'CANCELADA'
-                && $booking['start'] < $end && $booking['end'] > $start) return true;
+        foreach ([...$this->bookings, ...$this->sharedTournamentBlocks, ...$this->sharedRequestBlocks] as $booking) {
+            if (self::courtsShareSpace($court, $booking['court']) && $booking['date'] === $date
+                && $booking['status'] !== 'CANCELADA' && $booking['start'] < $end && $booking['end'] > $start) return true;
         }
         return false;
     }
@@ -262,9 +316,11 @@ final class DemoPortal
     private function slot(string $id, string $date, string $start, string $end, int $total): array
     {
         $court = self::COURTS[$id];
-        return ['court' => $id, 'courtName' => $court['name'], 'mode' => $court['mode'], 'site' => $court['site'], 'date' => $date,
+        $blocks = (int) $end - (int) $start;
+        return ['court' => $id, 'courtName' => $court['name'], 'mode' => $court['mode'],
+            'modeLabel' => self::MODES[$court['mode']]['label'], 'site' => 'rastras', 'date' => $date,
             'start' => $start, 'end' => $end, 'total' => $total,
-            'duration' => (int) ((strtotime($end) - strtotime($start)) / 60)];
+            'duration' => $blocks * self::BLOCK_MINUTES, 'blocks' => $blocks];
     }
 
     private function seed(string $code, string $owner, string $court, string $date, string $start, string $status): array

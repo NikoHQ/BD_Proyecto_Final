@@ -36,6 +36,10 @@ try {
     rejects('STALE', fn() => $legacyStore->replaceAdminSnapshot($recovered, true));
     $store = new TournamentStore($path, $now);
     $admin = $store->adminSnapshot();
+    $firstBlock = $admin['tournamentBookings'][0];
+    $crossing = $admin;
+    $crossing['tournamentBookings'][] = array_replace($firstBlock, ['id' => 98000, 'court' => 6, 'courtName' => 'Cancha grande']);
+    rejects('INVALID_TEAM', fn() => $store->replaceAdminSnapshot($crossing));
     $padel = $admin['tournaments'][1];
     $padel['capacity'] = count($padel['roster']) + 1;
     $admin['tournaments'][1] = $padel;
@@ -43,6 +47,11 @@ try {
     $tournament = $store->catalog()[1];
     expect($tournament['registration'] === 'OPEN' && $tournament['remaining'] === 1, 'Debe quedar el último cupo abierto.');
     expect(!isset($tournament['roster']), 'El catálogo es público.');
+    rejects('INVALID_TEAM', fn() => $store->saveTeam($padel['id'], $captain, 'Exceso',
+        [$player, $other], 'too-many', null, 2));
+    rejects('INVALID_TEAM', fn() => $store->saveTeam($padel['id'], $captain, 'Incompleto',
+        [['name' => 'Persona de prueba', 'rut' => '']], 'missing-rut', null, 2));
+    expect($store->catalog()[1]['remaining'] === 1, 'Los intentos inválidos conservan el cupo.');
     rejects('DUPLICATE_RUT', fn() => $store->saveTeam($padel['id'], $captain, 'Red', [$captain], 'duplicate', null, 2));
     rejects('SIZE_CHANGED', fn() => $store->saveTeam($padel['id'], $captain, 'Red', [$player], 'wrong-size', null, 4));
     $team = $store->saveTeam($padel['id'], $captain, 'Red', [$player], 'first', null, 2);
@@ -53,7 +62,18 @@ try {
     rejects('FORBIDDEN', fn() => $store->withdrawTeam($padel['id'], $team['id'], $other['rut']));
     rejects('FULL', fn() => $store->saveTeam($padel['id'], $other, 'Otro equipo', [$player], 'second'));
     rejects('STALE', fn() => $store->replaceAdminSnapshot($admin));
-    $team = $store->saveTeam($padel['id'], $captain, 'Red y Punto', [$player], 'edit', $team['id'], 2);
+    $team = $store->saveTeam($padel['id'], $captain, 'Red y Punto', [], 'edit', $team['id'], 2);
+    expect(count($team['players']) === 1, 'Puede guardar sólo a su capitán con máximo de dos.');
+    $increase = $store->adminSnapshot();
+    $increase['tournaments'][1]['teamSize'] = 3;
+    $increase = $store->replaceAdminSnapshot($increase);
+    expect($increase['tournaments'][1]['teamSize'] === 3, 'Se puede aumentar el máximo con equipos inscritos.');
+    $reduce = $increase;
+    $reduce['tournaments'][1]['teamSize'] = 1;
+    rejects('SIZE_CHANGED', fn() => $store->replaceAdminSnapshot($reduce));
+    $increase['tournaments'][1]['teamSize'] = 2;
+    $reduce = $store->replaceAdminSnapshot($increase);
+    expect($reduce['tournaments'][1]['teamSize'] === 2, 'Se puede reducir el máximo sin afectar a las plantillas activas.');
     $late = new TournamentStore($path, new DateTimeImmutable($tournament['deadline'], new DateTimeZone('America/Santiago')));
     rejects('CLOSED', fn() => $late->withdrawTeam($padel['id'], $team['id'], $captain['rut'], $captain['identity']));
     $store->withdrawTeam($padel['id'], $team['id'], $captain['rut'], $captain['identity']);
@@ -92,6 +112,18 @@ WORKER;
     }
     sort($results);
     expect($results === ['FULL', 'INSCRITO'], 'Sólo un proceso puede reservar el último cupo.');
+    $tennisConfig = $store->adminSnapshot();
+    $tennis = $tennisConfig['tournaments'][2];
+    $tennisConfig['tournaments'][2]['teamSize'] = 3;
+    $store->replaceAdminSnapshot($tennisConfig);
+    $retired = $store->saveTeam($tennis['id'], $captain, 'Raquetas', [$player], 'tennis', null, 3);
+    $store->withdrawTeam($tennis['id'], $retired['id'], $captain['rut'], $captain['identity']);
+    $tennisConfig = $store->adminSnapshot();
+    $tennisConfig['tournaments'][2]['teamSize'] = 1;
+    $tennisConfig = $store->replaceAdminSnapshot($tennisConfig);
+    expect(count(end($tennisConfig['tournaments'][2]['roster'])['players']) === 2,
+        'Reducir el máximo conserva la plantilla retirada.');
+
     echo "Inscripción a torneos verificada.\n";
 } finally {
     foreach ([$path, $path . '.lock', $importPath, $importPath . '.lock'] as $file) {
