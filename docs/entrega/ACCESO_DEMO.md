@@ -1,4 +1,4 @@
-# Cómo probar la demo de administración
+# Cómo probar la demo de SGCD
 
 ## Levantar el entorno
 
@@ -24,18 +24,23 @@ SQL*Plus pide la contraseña `SGCD_DB_PASSWORD` del `.env`. En el prompt de SQL*
 EXIT
 ```
 
-## Iniciar sesión
+## Entradas y cuentas de prueba
 
-Abre [el panel local](http://localhost:8080/).
+- [Portal de clientes](http://127.0.0.1:8080/)
+- [Panel administrativo](http://127.0.0.1:8080/dashboardadmin/)
+
+Usa el puerto **8080** para ver los mismos torneos e inscripciones en ambos paneles y para confirmar solicitudes web. La alternativa PHP local del puerto **8091** sirve para probar el portal por separado. El login del personal requiere el contenedor con OCI8 y Oracle.
 
 | Usuario de prueba | Clave inicial | Permite probar |
 | --- | --- | --- |
 | `ADMIN` | `Demo1234` | Perfil, gestión de personal y edición o anulación de pagos en la maqueta. |
 | `OPERADOR` | `Demo1234` | Perfil y pantallas operativas con las restricciones del rol. |
+| `demo` | `SGCDdemo2026` | Cliente de prueba con historial y acceso a torneos. |
+| `nuevo` | `SGCDdemo2026` | Cliente que puede tener una primera solicitud pendiente hasta que recepción la confirme. |
 
-Son credenciales de desarrollo sembradas por los catálogos v3. Si alguien cambió la clave en ese mismo Oracle, usa la clave vigente. Un administrador puede restablecer la de otro usuario desde **Usuarios del personal**. La recuperación con preguntas es tarea de backend y en la demo aparece como pendiente.
+Oracle recibe las credenciales de personal desde los catálogos v3. Las dos cuentas de cliente pertenecen a la demo del portal. Si alguien cambió la clave en ese mismo Oracle, usa la clave vigente. Un administrador puede restablecer la de otro usuario desde **Usuarios del personal**. La recuperación con preguntas es tarea de backend y en la demo aparece como pendiente.
 
-En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar sesión**. El login, la gestión de personal y la consulta Oracle de catálogos requieren la base. Agenda, reservas, clientes, pagos, recintos editables, tarifas y torneos usan ejemplos locales guardados en el navegador. Si quieres una demostración limpia, usa un perfil de navegador separado. Usa sólo datos ficticios.
+En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar sesión**. El login, la gestión de personal y la consulta Oracle de catálogos requieren la base. Agenda, reservas de mostrador, clientes, pagos, recintos editables y tarifas usan datos locales del navegador. Torneos, duraciones y revisión de solicitudes web usan archivos temporales compartidos por la instancia PHP. Las cuentas y reservas del portal usan sesiones PHP de demo. Usa sólo datos ficticios.
 
 ## Recorrido sugerido
 
@@ -44,3 +49,5 @@ En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar ses
 3. Recintos → Administrar canchas → Tarifas. Prueba un horario semanal y una franja nocturna.
 4. Torneos → Ver equipos. Abre un plantel y revisa el nombre, capitán e integrantes.
 5. Entra como Operador y comprueba que la edición y anulación de pagos queden fuera de sus acciones.
+
+Para probar reservas web de punta a punta e inscribir un equipo desde el portal, sigue el [recorrido del cliente](PORTAL_CLIENTE.md).

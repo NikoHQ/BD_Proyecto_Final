@@ -1,13 +1,14 @@
 # SGCD — Sistema de Gestión de Centros Deportivos
 
 Proyecto de **INF324 / ES3**. Motor de base de datos Oracle 26ai Free en Docker, lógica de negocio
-en PL/SQL y una web de administración en PHP y AdminLTE.
+en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administración con AdminLTE.
 **Entrega:** 2026-11-27.
 
-**Estado de la entrega:** esquema v3 y paquetes PL/SQL disponibles. El panel tiene acceso de personal conectado a Oracle y flujos operativos de demostración pendientes de integración.
+**Estado de la entrega:** esquema v3 y paquetes PL/SQL disponibles. El acceso de personal usa Oracle. El portal de clientes y los flujos operativos del panel están disponibles en modo demostración.
 
 - [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
 - [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
+- [Recorrido del portal de clientes](docs/entrega/PORTAL_CLIENTE.md)
 
 ---
 
@@ -23,7 +24,7 @@ en PL/SQL y una web de administración en PHP y AdminLTE.
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
 | `material/` | Enunciados del ramo, plantillas y documentos de entrega |
 | `infra/` | Instalación del servidor (Apache, PHP, Oracle) e inventario de lo instalado |
-| `web/` | Panel PHP, JavaScript por página, componentes y datos de demostración |
+| `web/` | Portal PHP, panel administrativo, JavaScript por página y adaptadores de demostración |
 | `CODEGO/` | Bitácora y reportes fechados del avance |
 
 ## La base, en orden
@@ -38,9 +39,9 @@ en PL/SQL y una web de administración en PHP y AdminLTE.
 | `sql/oracle/06_catalogos_v3.sql` | Catálogos de la v3 (80 tarifas, 2 credenciales demo) | cargado |
 | `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
 | `sql/oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | pendiente |
+| `sql/oracle/09_torneos_tamano_plantilla.sql` | Migración incremental del tamaño de plantilla | disponible |
 
-Se ejecutan **en ese orden**, dentro del esquema `SGCD`. `04_ddl_v3.sql` es autocontenido:
-borra las tablas `SGCD_*` existentes antes de crearlas, así que reemplaza a la v2 sin pasos manuales.
+Para inicializar un esquema v3 vacío, usa los scripts 04 a 06 como usuario `SGCD`. El script 04 recrea las tablas. Para incorporar el tamaño de plantilla a un esquema v3 existente, sigue [la guía de torneos](docs/entrega/TORNEOS_ORACLE.md).
 
 ## Convenciones de nombres
 
@@ -55,13 +56,14 @@ borra las tablas `SGCD_*` existentes antes de crearlas, así que reemplaza a la 
 
 ## Cómo se levanta
 
-```bash
-docker start oracle-free                      # el motor
-docker ps                                     # esperar (healthy)
-docker exec -it oracle-free sqlplus sgcd@localhost/FREEPDB1
+Desde la raíz del repositorio, configura `.env` a partir de `.env.example` y levanta los contenedores.
+
+```sh
+docker compose up -d
+docker compose ps
 ```
 
-Detalles de instalación, versiones y desinstalación en `infra/INSTALADO.md`.
+Abre el [portal de clientes](http://127.0.0.1:8080/) o el [panel administrativo](http://127.0.0.1:8080/dashboardadmin/). La [guía de acceso](docs/entrega/ACCESO_DEMO.md) explica cómo inicializar una base nueva y contiene las cuentas provisionales.
 
 ## Cómo se decide
 
@@ -74,4 +76,4 @@ documento en el mismo commit.
 1. `07_datos_operativos.sql` — clientes, credenciales de cliente, membresías, reservas, pagos, implementos y torneos demo.
 2. `08_pruebas_v3.sql` con la batería completa.
 3. Conectar la operación del panel a PHP y Oracle, incluida la recuperación de contraseña.
-4. Definir quién hace las pantallas del cliente final.
+4. Integrar el portal de clientes con Oracle, incluyendo reservas web e inscripciones a torneos.

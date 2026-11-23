@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 authStart();
 $recover = isset($_GET['recuperar']);
 $error = '';
@@ -32,7 +32,7 @@ try {
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= $recover ? 'Recuperar contraseña' : 'Iniciar sesión' ?> · SGCD</title>
-  <?php require __DIR__ . '/includes/styles.php'; ?>
+  <?php require __DIR__ . '/../includes/styles.php'; ?>
 </head>
 <body class="login-page sgcd-login">
   <main class="login-box">

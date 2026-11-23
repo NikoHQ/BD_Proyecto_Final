@@ -217,6 +217,10 @@ document.addEventListener('click', event => {
   const searchMatch = /^search-(client|booking)-(\d+)$/.exec(action);
   if (searchMatch) return openGlobalSearchResult(searchMatch[1], Number(searchMatch[2]));
   if (action === 'register-team') return openTeamRegistration();
+  if (action === 'ask-import-tournaments') return showDialog('Recuperar torneos', `
+    <p>Se cargarán los torneos guardados en este navegador en la demo compartida.</p>
+    ${button('import-tournaments', 'Recuperar torneos', 'btn-accent')}`);
+  if (action === 'import-tournaments') return importDemoTournaments();
   if (action === 'new-tournament') return openTournamentConfig();
   if (action === 'edit-tournament') return openTournamentConfig(true);
   if (action === 'schedule-tournament') return openTournamentSchedule();
@@ -282,10 +286,15 @@ document.addEventListener('click', event => {
   render();
   [...document.querySelectorAll('[data-action]')].find(el => el.dataset.action === action)?.focus();
 });
+async function refreshTournamentPanel() {
+  if (!$('dialog').classList.contains('show') && await refreshDemoTournaments()) render();
+}
 window.addEventListener('hashchange', () => {
   dialog.hide();
   render();
+  void refreshTournamentPanel();
 });
+window.addEventListener('focus', refreshTournamentPanel);
 $('dialog').addEventListener('shown.bs.modal', () => $('dialog-body').querySelector('input')?.focus());
 $('dialog').addEventListener('hidden.bs.modal', () => {
   if (!$('team-registration-form')) return;
@@ -294,5 +303,8 @@ $('dialog').addEventListener('hidden.bs.modal', () => {
   (trigger || document.querySelector('.tournament-picker .is-selected'))?.focus();
 });
 initDemoStore();
-render();
+void refreshDemoTournaments().then(render);
 window.setInterval(updateClocks, 15000);
+window.setInterval(() => {
+  if (!document.hidden && ['agenda', 'torneos'].includes(activePage())) void refreshTournamentPanel();
+}, 20000);

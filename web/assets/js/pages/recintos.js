@@ -82,7 +82,7 @@ function editSiteHours(site) {
 async function showOracleCatalog() {
   showDialog('Catálogo Oracle', '<p id="oracle-catalog" role="status">Consultando recintos y canchas…</p>');
   try {
-    const response = await fetch('catalogo-oracle.php');
+    const response = await fetch('/dashboardadmin/catalogo-oracle.php');
     if (!response.ok) throw new Error('Oracle no disponible');
     const { recintos, horarios, canchas } = await response.json();
     const container = $('oracle-catalog');

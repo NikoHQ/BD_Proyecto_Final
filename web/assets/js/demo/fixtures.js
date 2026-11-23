@@ -26,44 +26,6 @@ const demoRows = [
   [3, 'Escuela de básquetbol', '18:30', '19:30', 'pending'],
   [2, 'Pádel Sur', '16:00', '16:45', 'cancelled']
 ];
-const tournaments = [
-  { name: 'Copa Primavera Fútbol 7', site: 'Las Rastras', sport: 'Fútbol 7', teams: 12, capacity: 16,
-    days: ['2026-11-20', '2026-11-21', '2026-11-22'], blocks: [
-      [0, 0, '13:00', '17:00', 'Fase de grupos'],
-      [1, 0, '10:00', '12:00', 'Semifinales'], [1, 0, '16:00', '18:00', 'Final'],
-      [2, 0, '12:00', '14:00', 'Final del torneo']
-    ] },
-  { name: 'Torneo Pádel Mixto', site: 'Las Rastras', sport: 'Pádel dobles', teams: 8, capacity: 12,
-    days: ['2026-12-05', '2026-12-06'], blocks: [
-      [0, 2, '10:00', '13:00', 'Fase de grupos'], [1, 2, '12:00', '15:00', 'Rondas finales']
-    ] },
-  { name: 'Liga Interna de Vóleibol', site: 'La Florida', sport: 'Vóleibol 6x6', teams: 6, capacity: 8,
-    days: ['2026-12-12', '2026-12-13'], blocks: [
-      [0, 4, '09:30', '12:30', 'Primera jornada'], [1, 4, '14:00', '17:00', 'Segunda jornada']
-    ] }
-];
-const tournamentStates = {
-  PLANIFICADO: { name: 'Planificado', className: 'upcoming', symbol: 'calendar-event' },
-  EN_CURSO: { name: 'En curso', className: 'in-progress', symbol: 'play-circle-fill' },
-  FINALIZADO: { name: 'Finalizado', className: 'finished', symbol: 'check2-circle' },
-  CANCELADO: { name: 'Cancelado', className: 'finished', symbol: 'x-circle' }
-};
-tournaments.forEach((tournament, index) => {
-  tournament.teamSize = [7, 2, 6][index];
-  tournament.discount = 0;
-  tournament.roster = [];
-  tournament.state = initialDay < tournament.days[0] ? 'PLANIFICADO'
-    : initialDay > tournament.days.at(-1) ? 'FINALIZADO' : 'EN_CURSO';
-});
-const tournamentBookings = tournaments.flatMap((tournament, tournamentId) =>
-  tournament.blocks.map(([day, court, start, end, activity], index) => ({
-    id: 90001 + tournamentId * 100 + index, tournamentId, court, start, end, activity,
-    date: tournament.days[day], client: tournament.name, status: 'confirmed', origin: 'Torneo', amount: 0
-  }))
-);
-const isTournament = row => row.tournamentId !== undefined;
-const isActiveTournamentBlock = row => isTournament(row) && row.status !== 'cancelled';
-let nextTournamentBookingId = 91000;
 const demoClients = [
   { id: 1, name: 'Camila Rojas', rut: '12345678-5', phone: '+56 9 6123 4590', email: 'camila.rojas@demo.cl', type: 'Persona' },
   { id: 2, name: 'Martín Soto', rut: '11111111-1', phone: '+56 9 7234 5601', email: 'martin.soto@demo.cl', type: 'Persona' },

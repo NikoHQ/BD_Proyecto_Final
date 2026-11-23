@@ -1,5 +1,5 @@
 let selectedTournament = 0;
-let selectedTournamentDay = tournaments[0].days[0];
+let selectedTournamentDay = initialDay;
 const tournamentDates = ({ days }) => days.length === 1
   ? dayLabel(days[0]) : `${dayLabel(days[0])} – ${dayLabel(days.at(-1))}`;
 function tournamentBadge() {
@@ -36,6 +36,9 @@ function tournamentCards(selectable) {
   }).join('')}</div>`;
 }
 function tournamentView() {
+  if (!tournamentSnapshot) {
+    return heading('Torneos', '') + '<p role="status">Los torneos de demostración no están disponibles. Recarga la página para reintentar.</p>';
+  }
   const tournament = tournaments[selectedTournament];
   const blocks = tournamentBookings.filter(row => row.tournamentId === selectedTournament && row.status !== 'cancelled');
   const scheduled = blocks.filter(row => row.date === selectedTournamentDay);
@@ -58,13 +61,15 @@ function tournamentView() {
     </div><div class="summary-facilities"><strong>Instalaciones comprometidas</strong><div>${facilities || '<span class="text-secondary small">Sin canchas asignadas</span>'}</div></div>`) }
     ${card('Inscripción', `<div class="card-body planning-note"><span class="planning-icon">${icon(canRegister ? 'info-circle' : 'lock')}</span><div><strong>${canRegister ? (remaining === 1 ? '1 cupo disponible' : `${remaining} cupos disponibles`) : (!remaining ? 'Cupos completos' : tournament.state === 'PLANIFICADO' && !blocks.length ? 'Programa una cancha para abrir inscripciones' : 'Inscripciones cerradas')}</strong></div></div>`)}
   </aside>`;
-  return `${heading('Torneos', '', button('new-tournament', `${icon('plus-lg')} Nuevo torneo`, 'btn-accent'))}
+  const restore = tournamentSnapshot.version === 1 && legacyTournamentSnapshot()
+    ? button('ask-import-tournaments', 'Recuperar torneos de este navegador', 'btn-outline-secondary') : '';
+  return `${heading('Torneos', '', restore + button('new-tournament', `${icon('plus-lg')} Nuevo torneo`, 'btn-accent'))}
     <div class="tournament-layout">
       <aside aria-label="Elegir torneo">${tournamentCards(true)}</aside>
       <section class="card mb-0" aria-labelledby="tournament-title">
         <div class="card-body tournament-header">
           <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
-            <div><div class="d-flex flex-wrap align-items-center gap-2"><h2 id="tournament-title">${escapeHtml(tournament.name)}</h2>${tournamentStateBadge(tournament)}</div><p class="small text-secondary mb-0">${escapeHtml(siteName(tournament.site))} · ${tournament.sport} · ${tournamentDates(tournament)}</p><p class="small text-secondary mb-0">${tournament.teamSize} por equipo · ${tournament.discount}% de descuento de cancha</p></div>
+            <div><div class="d-flex flex-wrap align-items-center gap-2"><h2 id="tournament-title">${escapeHtml(tournament.name)}</h2>${tournamentStateBadge(tournament)}</div><p class="small text-secondary mb-0">${escapeHtml(siteName(tournament.site))} · ${escapeHtml(tournament.sport)} · ${tournamentDates(tournament)}</p><p class="small text-secondary mb-0">${tournament.teamSize} por equipo · ${tournament.discount}% de descuento de cancha</p></div>
             <div class="d-flex flex-wrap gap-2">
               ${button('tournament-agenda', `${icon('calendar3')} Ver en Agenda`, 'btn btn-light border btn-sm')}
               ${canRegister ? button('register-team', `${icon('person-plus')} Inscribir equipo`, 'btn-accent btn-sm') : ''}
@@ -87,8 +92,7 @@ function tournamentView() {
     </div>`;
 }
 function tournamentRegistrationOpen(tournament) {
-  return tournament.state === 'PLANIFICADO' && tournament.teams < tournament.capacity &&
-    localClock()[0] <= tournament.days.at(-1) && tournamentBlocks(tournament).length > 0;
+  return tournament.registration === 'OPEN';
 }
 const tournamentBlocks = tournament => tournamentBookings.filter(
   row => tournaments[row.tournamentId] === tournament && row.status !== 'cancelled'
@@ -123,6 +127,7 @@ function openTournamentConfig(edit = false) {
     </form>`);
 }
 function saveTournamentConfig(form) {
+  if (tournamentSaving || !tournamentSnapshot) return;
   const fields = Object.fromEntries(new FormData(form));
   const name = fields.name.trim();
   const edit = form.dataset.edit === 'true';
@@ -164,6 +169,7 @@ function openTournamentSchedule() {
     </form>`);
 }
 function saveTournamentBlock(form) {
+  if (tournamentSaving || !tournamentSnapshot) return;
   const tournament = tournaments[selectedTournament];
   if (!canScheduleTournament(tournament)) return;
   const { court, date: day, start, end, activity } = Object.fromEntries(new FormData(form));
@@ -318,7 +324,8 @@ function saveCaptain() {
   selectCaptain(client);
   toggleCaptainCreate(false);
 }
-function submitTeamRegistration(form) {
+async function submitTeamRegistration(form) {
+  if (tournamentSaving || !tournamentSnapshot) return;
   const tournament = tournaments[Number(form.dataset.tournamentId)];
   const editing = form.dataset.teamIndex !== '';
   const existing = editing ? tournament.roster[Number(form.dataset.teamIndex)] : null;
@@ -354,13 +361,13 @@ function submitTeamRegistration(form) {
   if (existing) Object.assign(existing, changes);
   else tournament.roster.push({ ...changes, withdrawn: false });
   tournament.teams = tournament.roster.filter(team => !team.withdrawn).length;
-  saveDemoTournaments();
+  if (!await saveDemoTournaments()) return;
   render();
   openTournamentTeams();
   feedback(`Equipo «${teamName}» ${editing ? 'actualizado' : 'inscrito'} en la maqueta.`);
 }
-function completeTournamentAction(message) {
-  saveDemoTournaments();
+async function completeTournamentAction(message) {
+  if (!await saveDemoTournaments()) return;
   dialog.hide();
   render();
   feedback(message);
@@ -397,13 +404,14 @@ function requestTeamWithdrawal(index) {
     <div class="d-flex gap-2">${button('view-tournament-teams', 'Volver')}
     ${button(`confirm-team-withdrawal-${index}`, 'Confirmar retiro', 'btn-danger btn-sm')}</div>`);
 }
-function confirmTeamWithdrawal(index) {
+async function confirmTeamWithdrawal(index) {
+  if (tournamentSaving || !tournamentSnapshot) return;
   const tournament = tournaments[selectedTournament];
   const team = tournament.roster[index];
   if (tournament.state !== 'PLANIFICADO' || !team || team.withdrawn) return;
   team.withdrawn = true;
   tournament.teams = tournament.roster.filter(entry => !entry.withdrawn).length;
-  saveDemoTournaments();
+  if (!await saveDemoTournaments()) return;
   render();
   openTournamentTeams();
   feedback('Equipo retirado. El cupo quedó disponible.');
@@ -437,6 +445,7 @@ const transitionDetails = {
   cancel: ['Cancelar torneo', 'Se liberarán los bloques que aún no hayan terminado.', 'CANCELADO']
 };
 function tournamentTransition(action, confirmed = false) {
+  if (tournamentSaving || !tournamentSnapshot) return;
   const tournament = tournaments[selectedTournament];
   const allowed = action === 'start' ? canStartTournament(tournament)
     : action === 'finish' ? tournament.state === 'EN_CURSO' : canScheduleTournament(tournament);
@@ -456,7 +465,8 @@ function tournamentTransition(action, confirmed = false) {
   }
   completeTournamentAction(`Torneo ${tournamentStates[state].name.toLowerCase()}.`);
 }
-function releaseTournamentBlock(id, confirmed = false) {
+async function releaseTournamentBlock(id, confirmed = false) {
+  if (tournamentSaving || !tournamentSnapshot) return;
   const tournament = tournaments[selectedTournament];
   const block = tournamentBlocks(tournament).find(row => row.id === id);
   if (!block || !canScheduleTournament(tournament)) return;
@@ -466,7 +476,7 @@ function releaseTournamentBlock(id, confirmed = false) {
       ${button(`confirm-release-tournament-block-${id}`, 'Confirmar liberación', 'btn-danger btn-sm')}</div>`);
   }
   block.status = 'cancelled';
-  saveDemoTournaments();
+  if (!await saveDemoTournaments()) return;
   render();
   openTournamentManagement();
   feedback('Bloque liberado en Agenda.');

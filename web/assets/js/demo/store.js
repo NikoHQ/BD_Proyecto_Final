@@ -56,59 +56,6 @@ function loadReservations() {
 }
 const nextReservationId = () => Math.max(Number(localStorage.getItem('sgcd-demo-last-reservation')) || 10450,
   10450, ...reservations.map(row => row.id)) + 1;
-const demoTournamentKey = 'sgcd-torneos-demo-v1';
-function saveDemoTournaments() {
-  try {
-    localStorage.setItem(demoTournamentKey, JSON.stringify({ tournaments, tournamentBookings }));
-  } catch { /* Continue with the current session if storage is unavailable. */ }
-}
-
-function initDemoTeams() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(demoTournamentKey));
-    if (stored?.tournaments?.length && Array.isArray(stored.tournamentBookings)) {
-      tournaments.splice(0, tournaments.length, ...stored.tournaments);
-      tournamentBookings.splice(0, tournamentBookings.length, ...stored.tournamentBookings);
-      nextTournamentBookingId = Math.max(90999, ...tournamentBookings.map(row => row.id)) + 1;
-      return;
-    }
-  } catch { /* Load sample teams if the saved data cannot be read. */ }
-
-  const captains = ['Ana Torres', 'Javier Vidal', 'Isabel Reyes', 'Tomás Silva',
-    'Paula Leiva', 'Bruno Molina', 'Claudia Díaz', 'Gabriel Ortiz', 'Elena Ríos',
-    'Pablo Vega', 'Inés Lagos', 'Nicolás Pardo'].map((name, index) => {
-    const rut = rutWithDigit(String(31000000 + index));
-    const existing = demoClients.find(client => client.rut === rut);
-    if (existing) return existing;
-    const client = { id: nextClientId++, name, rut, phone: '', email: '', type: 'Persona' };
-    demoClients.push(client);
-    return client;
-  });
-  const namesByTournament = [
-    ['Los Robles', 'Atlético del Valle', 'Deportivo Maule', 'Rayo Norte', 'Club Lircay', 'Unión Talca',
-      'Los Halcones', 'Cancha Abierta', 'Estrella del Sur', 'Barrio Central', 'Los Alerces', 'Ribera FC'],
-    ['Doble Rebote', 'Punto de Oro', 'Red Central', 'Los del Globo', 'Pádel Sur',
-      'Saque Cruzado', 'Set Decisivo', 'Viboras del Maule'],
-    ['Bloque Central', 'Red del Sur', 'Saque Alto', 'Las Gaviotas', 'Equipo Horizonte', 'Vóley Lircay']
-  ];
-  const givenNames = ['Sofía', 'Mateo', 'Valeria', 'Benjamín', 'Emilia', 'Lucas', 'Amanda'];
-  const surnames = ['Rojas', 'Castillo', 'Morales', 'Sepúlveda', 'Vargas', 'Navarro', 'Soto', 'Herrera', 'Fuentes', 'Contreras'];
-  tournaments.forEach((tournament, tournamentIndex) => {
-    tournament.roster = namesByTournament[tournamentIndex].map((name, index) => {
-      const captain = captains[index];
-      const players = Array.from({ length: tournament.teamSize - 1 }, (_, slot) => {
-        const participant = index * (tournament.teamSize - 1) + slot;
-        return {
-          name: givenNames[participant % givenNames.length] + ' ' + surnames[Math.floor(participant / givenNames.length) % surnames.length],
-          rut: rutWithDigit(String(32000000 + tournamentIndex * 1000 + participant))
-        };
-      });
-      return { name, captainId: captain.id, players: [{ name: captain.name, rut: captain.rut }, ...players], withdrawn: false };
-    });
-    tournament.teams = tournament.roster.length;
-  });
-  saveManagement();
-}
 function save(message) {
   try { localStorage.setItem(storageKey, JSON.stringify(reservations)); }
   catch { storageUnavailable = true; }
@@ -136,5 +83,4 @@ function initDemoStore() {
   });
   try { localStorage.setItem(storageKey, JSON.stringify(reservations)); }
   catch { /* The demo remains available in memory. */ }
-  initDemoTeams();
 }

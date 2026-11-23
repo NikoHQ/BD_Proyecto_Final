@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 authStart();
 $account = requireAccount();
 $view = $_GET['vista'] ?? 'perfil';
@@ -149,18 +149,18 @@ function roleName(string $role): string
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Configuración de cuenta · SGCD</title>
-  <?php require __DIR__ . '/includes/styles.php'; ?>
+  <?php require __DIR__ . '/../includes/styles.php'; ?>
 </head>
 <body>
 <main class="container py-4 account-workspace">
   <header class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div><a href="./">← Volver al panel</a><h1 class="mt-2">Configuración de cuenta</h1></div>
-    <form method="post" action="logout.php"><?= csrfField() ?><button class="btn btn-outline-secondary">Cerrar sesión</button></form>
+    <form method="post" action="/dashboardadmin/logout.php"><?= csrfField() ?><button class="btn btn-outline-secondary">Cerrar sesión</button></form>
   </header>
   <nav class="nav nav-tabs mb-3" aria-label="Cuenta">
     <?php foreach (['perfil' => 'Mi perfil', 'seguridad' => 'Seguridad', 'usuarios' => 'Usuarios del personal'] as $key => $label): ?>
       <?php if ($key === 'usuarios' && $account['ROL'] !== 'ADMINISTRADOR') continue; ?>
-      <a class="nav-link<?= $view === $key ? ' active' : '' ?>" href="account.php?vista=<?= $key ?>"<?= $view === $key ? ' aria-current="page"' : '' ?>><?= $label ?></a>
+      <a class="nav-link<?= $view === $key ? ' active' : '' ?>" href="/dashboardadmin/account.php?vista=<?= $key ?>"<?= $view === $key ? ' aria-current="page"' : '' ?>><?= $label ?></a>
     <?php endforeach; ?>
   </nav>
   <?php if ($error): ?><p class="alert alert-danger" role="alert"><?= esc($error) ?></p><?php endif; ?>

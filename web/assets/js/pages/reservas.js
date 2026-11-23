@@ -102,7 +102,9 @@ function reservationsView() {
       <td>${reservationStateLabel(row)}</td><td><span class="status ${payment.className}">${payment.label}</span></td><td>${row.origin}</td>
       <td>${reservationActionsMenu(row)}</td></tr>`;
   }).join('');
-  return `${heading('Reservas', 'Gestiona reservas, confirmaciones y pagos.', button('new', `${icon('plus-lg')} Nueva reserva`, 'btn-accent'))}
+  const actions = `<a class="btn btn-outline-secondary" href="/dashboardadmin/solicitudes-web.php">Solicitudes web</a>
+    ${button('new', `${icon('plus-lg')} Nueva reserva`, 'btn-accent')}`;
+  return `${heading('Reservas', 'Gestiona reservas, confirmaciones y pagos.', actions)}
     <div class="row g-2 mb-3">${metric('calendar2-check', 'Reservas del día', todayRows.length)}${metric('hourglass-split', 'Por confirmar', pendingRows.length)}${metric('exclamation-triangle', 'Con conflicto', conflictCount)}${metric('cash-stack', 'Ingresos proyectados', money.format(projected))}</div>
     <div class="row g-3 reservation-layout"><div class="col-12 col-xxl-9">${card(`Reservas del ${dateLabel.format(new Date(`${date}T12:00:00`))}`, `<div class="card-body border-bottom reservation-tools">
       <div class="toolbar"><input id="reservation-query" type="search" class="form-control" value="${escapeHtml(reservationQuery)}" placeholder="Buscar por ID, cliente, RUT o cancha" aria-label="Buscar reservas"><div class="btn-group" role="group" aria-label="Periodo"><button class="btn btn-sm ${reservationDateScope === 'today' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-today">Día</button><button class="btn btn-sm ${reservationDateScope === 'all' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-all">Todas</button></div></div>

@@ -14,10 +14,11 @@ Ejecutar **en orden**, conectado como el esquema dueño (`SGCD`), no como `SYSTE
 | 06 | `oracle/06_catalogos_v3.sql` | Catálogos adaptados a la v3 | sí, carga |
 | 07 | `oracle/07_datos_operativos.sql` | Datos demo re-ejecutables | sí, recarga |
 | 08 | `oracle/08_pruebas_v3.sql` | Pruebas negativas y positivas de la v3 | no, limpia al final |
+| 09 | [`oracle/09_torneos_tamano_plantilla.sql`](oracle/09_torneos_tamano_plantilla.sql) | Migra el tamaño de los equipos sobre Oracle v3 | conserva los datos existentes |
 
 La v3 reemplaza a la v2: `04` borra lo que haya. Para conservar la v2 hay que exportarla antes.
 `03_catalogos_v2.sql` **no sirve en la v3**: reajusta columnas `IDENTITY`, que ya no existen. Los
-catálogos de la v3 van en `06`.
+catálogos de la v3 van en `06`. En un esquema v3 existente, aplica únicamente la migración `09` para incorporar el tamaño de equipo. [Contrato Oracle de torneos](../docs/entrega/TORNEOS_ORACLE.md)
 
 ## SQLite — prototipo, no se entrega
 
