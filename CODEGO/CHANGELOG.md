@@ -522,3 +522,46 @@ carga correcta se verificó con `DUMP` (`Fútbol` = 46,195,186,...).
 **Siguiente.** `12_paquetes_sgcd_19.sql`: AUTH sobre `SGCD_USUARIOS`, clientes con auditoría, tarifas
 por bloque, reservas con bloques consecutivos y regla de la cancha grande, torneos con nómina y
 pago único, más los mantenedores de Ignacio con los nombres del modelo.
+
+---
+
+## 2026-11-23 (3) — Fase 3 por unidades: auth, clientes, mantenedores y tarifas
+
+**Contexto.** Sesión con el protocolo `/calmadito`: cada unidad se declaró con su contrato, se
+escribió sola y se revisó contra las cuatro lentes antes de abrir la siguiente. Se fijó como regla
+que **no se toca ninguna tabla del UML**; todo se resuelve en paquetes y procedimientos.
+
+**Archivos**
+
+| Ruta | Unidad |
+|---|---|
+| `sql/oracle/12a_pkg_auth.sql` | 1. `SGCD_PKG_AUTH` sobre `SGCD_USUARIOS`: `crear_usuario`, `cuenta`, `cambiar_clave`, `cambiar_estado` |
+| `sql/oracle/12b_pkg_clientes.sql` | 2. `SGCD_PKG_CLIENTES`: ficha idempotente por RUT, `registrar_cuenta_web` que engancha la ficha presencial, borrado con guardas |
+| `sql/oracle/12c_mantenedores_catalogo.sql` | 3. Ignacio: deporte, modalidad, cancha y cancha–modalidad |
+| `sql/oracle/12d_mantenedores_horario.sql` | 4. Ignacio: horario, bloque y administrador, con los renombres `DIA_SEMANA`, `HORA_APERTURA`, `HORA_CIERRE` |
+| `sql/oracle/12e_mantenedor_tarifas.sql` | 5. Ignacio: tarifas, con los seis renombres sin sufijo `_TARIFA` |
+| `sql/oracle/12f_pkg_tarifas.sql` | 6. `SGCD_PKG_TARIFAS`: `valor_bloque`, `cotizar` con total y detalle por hora |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de las seis unidades, acumuladas |
+| `sql/README.md`, `README.md` | Orden de ejecución nuevo y estado real de los paquetes |
+
+**Decisiones de la sesión.** Pago anulado: una fila por reserva, anular y recobrar reutiliza la fila.
+`reprogramar_reserva` entra en la unidad de reservas. Códigos de error: se mantienen los dos rangos
+(`-20xxx` nuestros, `-208xx` de Ignacio). El cliente no cancela: lo justifica la política del recinto.
+La programación de torneo recibe un rango y el paquete la divide en bloques. En el API, los códigos
+conocidos usan su mensaje y sólo lo no mapeado cae al mensaje de Oracle.
+
+**Verificación.** Esquema `SGCD19` sobre `oracle-free`: 19 tablas, 3 paquetes, 34 procedimientos,
+1 función y 18 triggers, todos `VALID`. `13_pruebas_sgcd_19.sql` en verde (22 comprobaciones del DDL)
+y `14_pruebas_paquetes_sgcd_19.sql` con **122 comprobaciones en verde** en las seis unidades.
+
+**Hallazgos abiertos**
+
+1. La regla de Ignacio "una tarifa iniciada no se modifica ni se borra" (`-20810`/`-20811`) impide
+   editar las 120 tarifas del catálogo desde el panel. Para la fase 4: editar sólo franjas futuras y,
+   para las iniciadas, ofrecer "desactivar y crear nueva".
+2. `-20860…-20864` se comparten entre canchas y administradores, y las altas no validan el padre
+   (`ORA-02291`). Se resuelve en el mapa de errores del API, sin renumerar.
+3. `SGCD_PKG_CLIENTES` ya no tiene `buscar_ficha`: nada la usaba y `listar_fichas(texto)` la cubre.
+
+**Siguiente.** Unidad 7: `SGCD_PKG_RESERVAS` con bloques consecutivos, candado ordenado del grupo
+grande/1-2-3, cotización desde `SGCD_PKG_TARIFAS` y `reprogramar_reserva`.

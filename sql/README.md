@@ -10,8 +10,14 @@ Ejecutar **en orden**, conectado como el esquema dueño (`SGCD`), no como `SYSTE
 |---|---|---|---|
 | 10 | `oracle/10_ddl_sgcd_19.sql` | **Esquema de 19 tablas del UML del equipo.** Autocontenido: borra las `SGCD_*` y las `SGCD_SEQ_*` y las recrea, con PK, FK, `UNIQUE`, `CHECK`, índices, 16 secuencias y 18 triggers (16 de llave y los 2 de auditoría) | sí, borra |
 | 11 | `oracle/11_catalogos_sgcd_19.sql` | Catálogos del recinto único: 10 canchas (6 de fútbol 6, la grande y 3 sueltas), sus componentes, 3 deportes, 3 modalidades, 6 horarios, 82 bloques, 120 tarifas, 3 torneos y las cuentas de laboratorio | sí, purga y carga |
-| 12 | `oracle/12_paquetes_sgcd_19.sql` | Paquetes PL/SQL adaptados al modelo objetivo | no |
+| 12a | `oracle/12a_pkg_auth.sql` | `SGCD_PKG_AUTH` sobre `SGCD_USUARIOS`: cuenta con perfil, alta, clave y estado | no |
+| 12b | `oracle/12b_pkg_clientes.sql` | `SGCD_PKG_CLIENTES`: ficha, registro de cuenta web y borrado con guardas | no |
+| 12c | `oracle/12c_mantenedores_catalogo.sql` | Procedimientos de Ignacio: deporte, modalidad, cancha y cancha–modalidad | no |
+| 12d | `oracle/12d_mantenedores_horario.sql` | Procedimientos de Ignacio: horario, bloque y administrador | no |
+| 12e | `oracle/12e_mantenedor_tarifas.sql` | Procedimientos de Ignacio: tarifas por cancha, modalidad, día y franja | no |
+| 12f | `oracle/12f_pkg_tarifas.sql` | `SGCD_PKG_TARIFAS`: valor por bloque y cotización de N bloques con detalle | no |
 | 13 | `oracle/13_pruebas_sgcd_19.sql` | Comprobaciones del DDL y los catálogos: objetos, coherencia, IDs automáticos, auditoría y reglas negativas. Revierte todo al final | no, limpia al final |
+| 14 | `oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de los paquetes y mantenedores, por unidad. Revierte todo al final | no, limpia al final |
 
 Instalación rápida (el `NLS_LANG` es obligatorio: sin él, SQL*Plus en un contenedor sin locale
 convierte los acentos y la "·" en caracteres de reemplazo al insertar):
