@@ -452,3 +452,41 @@ panel desplegado en `/srv/http` sobre Apache + PHP-FPM nativo y login contra Ora
 
 **Base al cierre:** 0 clientes, 0 reservas, 0 pagos, 0 filas de auditoría; 80 tarifas, 3
 administradores y 3 credenciales (`ADMIN`, `OPERADOR`, `NAIKO`).
+
+---
+
+## 2026-11-23 — Entrega del equipo (UML de 19 tablas) fusionada y plan de integración
+
+**Contexto.** El grupo cerró el modelo objetivo: **19 tablas** con un recinto único, fútbol/tenis/pádel,
+usuarios con rol administrador o cliente, horarios en bloques de una hora y la cancha grande compuesta
+por las canchas 1, 2 y 3. Pablo entregó `tablas.sql`; Ignacio, nueve mantenedores, pago de reserva,
+auditoría y reportes; Eric subió el portal de clientes adaptado al modelo.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `23-11-26/` | Material recibido tal cual: `mensajes.txt`, `tablas.sql`, `UML_objetivo_19_tablas.mdj`, `mi_parte_nuevo/` y `tablas/` |
+| `docs/diseno/2026-11-23-plan-19-tablas.md` | Plan de integración: mapa v3 → 19 tablas, renombres del SQL de Ignacio, 8 decisiones bloqueantes, fases y reparto |
+| `README.md` | Estado al 23-11 y pendientes reordenados por el modelo objetivo |
+| `docs/entrega/ACCESO_DEMO.md` | Fusión de ambas guías; cuentas corregidas a `ADMIN/admin` y `OPERADOR/Demo1234` |
+
+**Fusión de `codex/frontend-admin-demo` (`563d14d`) en `main` (`27267d8`).** Entran el portal de
+clientes (`web/cliente/`), el panel reubicado en `web/dashboardadmin/`, los contratos
+`RESERVAS_ORACLE.md` y `TORNEOS_ORACLE.md`, `MODELO_OBJETIVO.md`, el UML de 19 tablas en
+`docs/modelo/uml-equipo-19/` y las pruebas `tests/portal-cliente.php` y `tests/torneos-cliente.php`.
+
+**Resolución de conflictos.** `web/index.php` queda como portal; la administración vive en
+`/dashboardadmin/`. `README.md` y `ACCESO_DEMO.md` se combinan. En `sql/oracle/04` y `06` se conserva
+el esquema v3 de 23 tablas, que es el que compila con los paquetes y la auditoría desplegados; la
+adaptación de 16 tablas de la rama queda en el historial (`563d14d`) como referencia para el DDL
+definitivo. La fusión automática de `05_paquetes_plsql.sql` conservó el CRUD de la ficha y los reportes.
+
+**Validación.** `php -l` sobre todo `web/` sin errores; `tests/portal-cliente.php` y
+`tests/torneos-cliente.php` en verde. Sin ejecutar Oracle en esta sesión: el DDL de 19 tablas todavía
+no existe.
+
+**Decisiones que hay que cerrar con el grupo** (detalle en el plan): 17 vs 19 tablas · `TARIFA` con o
+sin `ID_MODALIDAD` · columnas de auditoría (valores serializados de Pablo vs una columna por campo de
+Ignacio) · rol `OPERADOR` fuera del UML · "partidos y bloqueos" del calendario fuera de alcance ·
+secuencias y triggers de las 19 tablas.
