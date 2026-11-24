@@ -9,6 +9,7 @@ require_once __DIR__ . '/../includes/reservas-dto.php';
  * acepta un ID de cliente por parametro.
  *
  *   GET  disponible  cancha, modalidad, fecha, hora, bloques
+ *   GET  cotizar     cancha, modalidad, fecha, hora, bloques
  *   POST solicitar   cancha, modalidad, fecha, hora, bloques
  *   GET  mias        desde, hasta
  */
@@ -32,6 +33,10 @@ if ($idCliente <= 0) {
 switch ($accion) {
     case 'disponible':
         apiOk(['disponible' => disponibilidadReservas($_GET)]);
+        break;
+
+    case 'cotizar':
+        apiOk(cotizacionReservas($_GET));
         break;
 
     case 'solicitar':

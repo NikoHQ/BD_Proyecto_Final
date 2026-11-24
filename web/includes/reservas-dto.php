@@ -46,8 +46,7 @@ function disponibilidadReservas(array $entrada): bool
 }
 
 function agendaReservas(array $entrada, ?int $idCliente = null): array
-{
-    $desde = apiFecha((string) ($entrada['desde'] ?? ''), 'desde');
+{    $desde = apiFecha((string) ($entrada['desde'] ?? ''), 'desde');
     $hasta = apiFecha((string) ($entrada['hasta'] ?? ''), 'hasta');
     $cancha = isset($entrada['cancha']) && $entrada['cancha'] !== ''
         ? apiEntero($entrada['cancha'], 'cancha') : null;
@@ -61,4 +60,33 @@ function agendaReservas(array $entrada, ?int $idCliente = null): array
         'cursor'
     );
     return array_map('reservaFila', $r['filas']);
+}
+
+/**
+ * Precio de una seleccion antes de reservar. La tarifa la decide el paquete;
+ * el navegador solo muestra el total y el desglose por bloque.
+ */
+function cotizacionReservas(array $entrada): array
+{
+    $r = apiLlamar(
+        'BEGIN SGCD_PKG_TARIFAS.cotizar(:cancha, :modalidad, :fecha, :hora, :bloques, :total, :cursor); END;',
+        [
+            'cancha' => apiEntero($entrada['cancha'] ?? null, 'cancha'),
+            'modalidad' => apiEntero($entrada['modalidad'] ?? null, 'modalidad'),
+            'fecha' => apiFecha((string) ($entrada['fecha'] ?? ''), 'fecha'),
+            'hora' => apiHora((string) ($entrada['hora'] ?? '')),
+            'bloques' => apiEntero($entrada['bloques'] ?? 1, 'bloques'),
+            'total' => 0,
+        ],
+        false,
+        'cursor'
+    );
+    return [
+        'total' => (float) $r['out']['total'],
+        'detalle' => array_map(static fn(array $f): array => [
+            'desde' => $f['HORA_INICIO'],
+            'hasta' => $f['HORA_TERMINO'],
+            'valor' => (float) $f['VALOR_HORA'],
+        ], $r['filas']),
+    ];
 }

@@ -1,7 +1,8 @@
 # Pendiente — fase 4, unidad 5: pantallas conectadas
 
-**Fecha:** 2026-11-24 · **Estado:** backend terminado y probado; el navegador todavía usa datos
-falsos. Este documento es el punto de retomada.
+**Fecha:** 2026-11-24 · **Estado:** cerrada. El detalle de lo implementado y verificado
+está en `2026-11-24-unidad5-cerrada.md`; este documento queda como registro del punto de
+retomada.
 
 ## Lo que ya está listo
 

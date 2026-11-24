@@ -11,6 +11,7 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="<?= esc(csrfToken()) ?>">
   <title>SGCD · Administración</title>
   <?php require __DIR__ . '/../includes/styles.php'; ?>
   <link rel="stylesheet" href="/assets/css/agenda.css">
@@ -19,9 +20,10 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0/dist/js/adminlte.min.js"></script>
   <?php foreach ([
-      'shared/format', 'shared/components', 'demo/fixtures', 'demo/store', 'demo/tournaments',
+      'shared/format', 'shared/components', 'data/api', 'data/panel-store',
+      'demo/fixtures', 'demo/store', 'demo/tournaments',
       'shared/list-view', 'pages/agenda', 'pages/reservas', 'pages/clientes', 'pages/pagos',
-      'pages/recintos', 'pages/tarifas', 'pages/torneos', 'shared/search', 'app',
+      'pages/recintos', 'pages/tarifas', 'pages/torneos', 'pages/reportes', 'shared/search', 'app',
   ] as $script): ?>
     <script defer src="/assets/js/<?= $script ?>.js"></script>
   <?php endforeach; ?>
@@ -62,7 +64,7 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
     </div>
     <div class="sidebar-wrapper">
       <nav class="mt-3" aria-label="Menú principal"><ul id="menu" class="nav sidebar-menu flex-column"></ul></nav>
-      <div class="side-foot"><i class="bi bi-circle-fill me-1"></i> Modo demostración</div>
+      <div class="side-foot"><i class="bi bi-database-check me-1"></i> Oracle · SGCD</div>
     </div>
   </aside>
   <main class="app-main"><div class="app-content"><div class="container-fluid workspace" id="screen"></div></div></main>

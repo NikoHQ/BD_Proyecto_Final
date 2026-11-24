@@ -84,11 +84,18 @@ function apiErrorOracle(int $codigo, string $mensaje): never
 /** Fecha Y-m-d del navegador; se devuelve lista para bind DATE. */
 function apiFecha(string $valor, string $campo = 'fecha'): string
 {
-    $fecha = DateTimeImmutable::createFromFormat('!Y-m-d', $valor);
-    if (!$fecha || $fecha->format('Y-m-d') !== $valor) {
+    return apiFechaCorta($valor, $campo) . ' 00:00:00';
+}
+
+/** Valida Y-m-d y devuelve solo el dia, para consultas de rango. */
+function apiFechaCorta(mixed $valor, string $campo = 'fecha'): string
+{
+    $texto = is_scalar($valor) ? trim((string) $valor) : '';
+    $fecha = DateTimeImmutable::createFromFormat('!Y-m-d', $texto);
+    if (!$fecha || $fecha->format('Y-m-d') !== $texto) {
         apiFail('El campo ' . $campo . ' no es una fecha valida.', 400);
     }
-    return $valor . ' 00:00:00';
+    return $texto;
 }
 
 /** Hora HH:MM del navegador. */

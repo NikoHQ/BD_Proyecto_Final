@@ -1,35 +1,81 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/portal-inbox.php';
-require_once __DIR__ . '/../cliente/demo.php';
 
 authStart();
-$account = requireStaff();
-$canConfirm = $account['ROL'] === 'ADMINISTRADOR';
+$cuenta = requireStaff();
+$puedeConfirmar = $cuenta['ROL'] === 'ADMINISTRADOR';
+$aviso = null;
+
+/** Solicitudes web pendientes del rango visible. */
+function solicitudesWeb(): array
+{
+    $conexion = authDb();
+    $desde = date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
+    $hasta = date('Y-m-d', strtotime('+90 days')) . ' 00:00:00';
+    $sentencia = oci_parse($conexion,
+        'BEGIN SGCD_PKG_RESERVAS.agenda(:desde, :hasta, NULL, NULL, :cursor); END;');
+    $cursor = oci_new_cursor($conexion);
+    oci_bind_by_name($sentencia, ':desde', $desde);
+    oci_bind_by_name($sentencia, ':hasta', $hasta);
+    oci_bind_by_name($sentencia, ':cursor', $cursor, -1, SQLT_RSET);
+    if (!@oci_execute($sentencia) || !@oci_execute($cursor)) {
+        throw new RuntimeException('No se pudo leer la agenda.');
+    }
+    $filas = [];
+    oci_fetch_all($cursor, $filas, 0, -1, OCI_FETCHSTATEMENT_BY_ROW);
+    oci_free_statement($cursor);
+    oci_free_statement($sentencia);
+    return array_values(array_filter($filas, static fn(array $f): bool =>
+        $f['ORIGEN_RESERVA'] === 'WEB' && $f['ESTADO_RESERVA'] === 'PENDIENTE'));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     checkCsrf();
-    $status = match (post('action')) {
-        'confirm' => 'CONFIRMADA',
-        'cancel' => 'CANCELADA',
-        default => '',
-    };
-    if ($status === 'CONFIRMADA' && !$canConfirm) {
+    $id = filter_var(post('reserva'), FILTER_VALIDATE_INT) ?: 0;
+    $accion = post('accion');
+    if ($id <= 0 || !in_array($accion, ['confirmar', 'cancelar'], true)) {
+        http_response_code(400);
+        exit('Solicitud no válida.');
+    }
+    if ($accion === 'confirmar' && !$puedeConfirmar) {
         http_response_code(403);
         exit('Sólo un administrador puede confirmar la reserva.');
     }
-    $key = post('request');
-    $_SESSION['portal_review_notice'] = $status !== '' && preg_match('/^[a-f0-9]{32}$/D', $key)
-        && reviewPortalRequest($key, $status)
-        ? ['success', $status === 'CONFIRMADA' ? 'Reserva confirmada.' : 'Solicitud cancelada.']
-        : ['warning', 'La solicitud ya fue resuelta o no está disponible.'];
+    try {
+        $procedimiento = $accion === 'confirmar' ? 'confirmar_reserva' : 'cancelar_reserva';
+        $sentencia = oci_parse(authDb(), "BEGIN SGCD_PKG_RESERVAS.$procedimiento(:id); END;");
+        $idReserva = $id;
+        oci_bind_by_name($sentencia, ':id', $idReserva);
+        if (!@oci_execute($sentencia)) {
+            throw new RuntimeException(oci_error($sentencia)['message'] ?? 'No se pudo actualizar la reserva.');
+        }
+        oci_commit(authDb());
+    } catch (Throwable $error) {
+        rollbackAccountWork();
+        $texto = $error->getMessage();
+        $aviso = str_contains($texto, 'ORA-20046')
+            ? 'El estado actual de la reserva no permite esa operación.'
+            : 'No se pudo actualizar la reserva.';
+    }
+    if ($aviso === null) {
+        $aviso = $accion === 'confirmar' ? 'Reserva confirmada.' : 'Solicitud cancelada.';
+    }
+    $_SESSION['solicitudes_aviso'] = $aviso;
     redirectTo('/dashboardadmin/solicitudes-web.php');
 }
 
-$notice = $_SESSION['portal_review_notice'] ?? null;
-unset($_SESSION['portal_review_notice']);
-$pending = array_filter(portalInbox(), static fn(array $request): bool => $request['status'] === 'PENDIENTE');
-uasort($pending, static fn(array $a, array $b): int => [$a['date'], $a['start']] <=> [$b['date'], $b['start']]);
+$aviso = $_SESSION['solicitudes_aviso'] ?? null;
+unset($_SESSION['solicitudes_aviso']);
+
+try {
+    $pendientes = solicitudesWeb();
+    $errorBase = '';
+} catch (Throwable $error) {
+    error_log('SGCD solicitudes web: ' . $error->getMessage());
+    $pendientes = [];
+    $errorBase = 'No se pudo consultar la agenda en Oracle.';
+}
 ?>
 <!doctype html>
 <html lang="es">
@@ -42,24 +88,26 @@ uasort($pending, static fn(array $a, array $b): int => [$a['date'], $a['start']]
 <main class="container py-4">
   <a href="/dashboardadmin/#reservas">← Volver a Reservas</a>
   <h1 class="mt-2">Solicitudes web</h1>
-  <p>Confirma o cancela las reservas pendientes del portal de clientes. Modo demostración.</p>
-  <?php if ($notice): ?><p class="alert alert-<?= esc($notice[0]) ?>" role="status"><?= esc($notice[1]) ?></p><?php endif; ?>
+  <p>Reservas creadas por clientes desde el portal. Quedan pendientes hasta que el personal las confirme.</p>
+  <?php if ($aviso): ?><p class="alert alert-info" role="status"><?= esc($aviso) ?></p><?php endif; ?>
+  <?php if ($errorBase): ?><p class="alert alert-danger" role="alert"><?= esc($errorBase) ?></p><?php endif; ?>
   <section class="card">
-    <?php if (!$pending): ?><p class="card-body mb-0">No hay solicitudes web pendientes.</p>
+    <?php if (!$pendientes): ?><p class="card-body mb-0">No hay solicitudes web pendientes.</p>
     <?php else: ?><div class="table-responsive">
       <table class="table align-middle mb-0">
-        <thead><tr><th>Código</th><th>Cliente</th><th>Cancha</th><th>Horario</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Reserva</th><th>Cliente</th><th>Cancha</th><th>Horario</th><th>Importe</th><th>Acciones</th></tr></thead>
         <tbody>
-          <?php foreach ($pending as $key => $request): ?>
+          <?php foreach ($pendientes as $fila): ?>
             <tr>
-              <th scope="row"><?= esc($request['code']) ?></th>
-              <td><?= esc($request['customer']) ?></td>
-              <td><?= esc($request['courtName']) ?> · <?= esc(DemoPortal::siteName($request['site'])) ?></td>
-              <td><?= esc($request['date']) ?> · <?= esc($request['start'] . '–' . $request['end']) ?></td>
-              <td><form class="d-flex flex-wrap gap-2" method="post">
-                <?= csrfField() ?><input type="hidden" name="request" value="<?= esc($key) ?>">
-                <?php if ($canConfirm): ?><button class="btn btn-accent btn-sm" name="action" value="confirm">Confirmar reserva</button><?php endif; ?>
-                <button class="btn btn-outline-danger btn-sm" name="action" value="cancel">Cancelar solicitud</button>
+              <th scope="row">#R-<?= (int) $fila['ID_RESERVA'] ?></th>
+              <td><?= esc($fila['NOMBRE_CLIENTE'] ?? '—') ?></td>
+              <td><?= esc($fila['NOMBRE_CANCHA']) ?> · <?= esc($fila['NOMBRE_MODALIDAD']) ?></td>
+              <td><?= esc(substr((string) $fila['INICIO_RESERVA'], 0, 16)) ?>–<?= esc(substr((string) $fila['TERMINO_RESERVA'], 11, 5)) ?></td>
+              <td><?= esc('$' . number_format((float) $fila['IMPORTE_ACORDADO'], 0, ',', '.')) ?></td>
+              <td><form class="d-flex flex-wrap gap-2" method="post" action="/dashboardadmin/solicitudes-web.php">
+                <?= csrfField() ?><input type="hidden" name="reserva" value="<?= (int) $fila['ID_RESERVA'] ?>">
+                <?php if ($puedeConfirmar): ?><button class="btn btn-accent btn-sm" name="accion" value="confirmar">Confirmar reserva</button><?php endif; ?>
+                <button class="btn btn-outline-danger btn-sm" name="accion" value="cancelar">Cancelar solicitud</button>
               </form></td>
             </tr>
           <?php endforeach; ?>

@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../includes/reservas-dto.php';
  *
  *   GET  agenda      desde, hasta [cancha, cliente]
  *   GET  disponible  cancha, modalidad, fecha, hora, bloques
+ *   GET  cotizar     cancha, modalidad, fecha, hora, bloques
  *   POST crear       cliente, cancha, modalidad, fecha, hora, bloques
  *   POST confirmar   id
  *   POST cancelar    id
@@ -35,6 +36,10 @@ switch ($accion) {
 
     case 'disponible':
         apiOk(['disponible' => disponibilidadReservas($_GET)]);
+        break;
+
+    case 'cotizar':
+        apiOk(cotizacionReservas($_GET));
         break;
 
     case 'crear':

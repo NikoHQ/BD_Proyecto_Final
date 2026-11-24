@@ -81,23 +81,21 @@ function editSiteHours(site) {
 async function showOracleCatalog() {
   showDialog('Catálogo Oracle', '<p id="oracle-catalog" role="status">Consultando recintos y canchas…</p>');
   try {
-    const response = await fetch('/dashboardadmin/catalogo-oracle.php');
-    if (!response.ok) throw new Error('Oracle no disponible');
-    const { recintos, horarios, canchas } = await response.json();
+    const { recintos, canchas } = await apiGet('/dashboardadmin/api/catalogo.php');
     const container = $('oracle-catalog');
     if (!container) return;
-    const catalog = recintos.map(site => {
-      const opening = horarios.filter(row => row.ID_RECINTO === site.ID_RECINTO).map(row => [
-        ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][Number(row.DIA_SEMANA_HORARIO) - 1],
-        row.HORA_APERTURA_HORARIO, row.HORA_CIERRE_HORARIO
+    const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const catalog = recintos.map(recinto => {
+      const apertura = Object.entries(recinto.horarios || {}).map(([dia, horas]) =>
+        [dias[Number(dia) - 1], horas[0], horas[1]].map(escapeHtml));
+      const instalaciones = canchas.filter(cancha => cancha.recinto === recinto.id).map(cancha => [
+        cancha.nombre, cancha.estado, cancha.modalidades.map(modalidad => modalidad.nombre).join(', ') || 'Sin modalidad',
+        String(cancha.modalidades.length)
       ].map(escapeHtml));
-      const facilities = canchas.filter(row => row.ID_RECINTO === site.ID_RECINTO).map(row => [
-        row.NOMBRE_CANCHA, row.ESTADO_CANCHA, row.NOMBRE_MODALIDAD || 'Sin modalidad', row.TARIFAS_ACTIVAS
-      ].map(escapeHtml));
-      return '<details class="border rounded p-2 mb-2"><summary>' + escapeHtml(site.NOMBRE_RECINTO) +
-        '</summary><p class="mt-2">' + escapeHtml(site.DIRECCION_RECINTO + ' · ' + site.COMUNA_RECINTO + ' · ' + site.ESTADO_RECINTO) +
-        '</p>' + table(['Día', 'Abre', 'Cierra'], opening) +
-        table(['Cancha', 'Estado', 'Modalidad', 'Tarifas activas'], facilities) + '</details>';
+      return '<details class="border rounded p-2 mb-2"><summary>' + escapeHtml(recinto.nombre) +
+        '</summary><p class="mt-2">' + escapeHtml(recinto.direccion + ' · ' + recinto.estado) +
+        '</p>' + table(['Día', 'Abre', 'Cierra'], apertura) +
+        table(['Cancha', 'Estado', 'Modalidad', 'Modalidades'], instalaciones) + '</details>';
     }).join('');
     container.outerHTML = '<div id="oracle-catalog"><p class="small text-secondary">Consulta de solo lectura.</p>' +
       (catalog || '<p>Oracle todavía no tiene recintos.</p>') + '</div>';

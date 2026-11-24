@@ -20,8 +20,20 @@ if ($metodo !== 'GET') {
 }
 apiSesion(['ADMINISTRADOR']);
 
-$desde = apiFecha((string) ($_GET['desde'] ?? ''), 'desde');
-$hasta = apiFecha((string) ($_GET['hasta'] ?? ''), 'hasta');
+// El rango es obligatorio: sin dos fechas Y-m-d el reporte no tiene sentido y
+// el codigo viaja como 20080, el mismo que usa SGCD_PKG_CONSULTAS.
+$desdeCrudo = is_scalar($_GET['desde'] ?? null) ? (string) $_GET['desde'] : '';
+$hastaCrudo = is_scalar($_GET['hasta'] ?? null) ? (string) $_GET['hasta'] : '';
+$fechaValida = static function (string $valor): bool {
+    $fecha = DateTimeImmutable::createFromFormat('!Y-m-d', $valor);
+    return $fecha !== false && $fecha->format('Y-m-d') === $valor;
+};
+if (!$fechaValida($desdeCrudo) || !$fechaValida($hastaCrudo)) {
+    apiFail(API_ERRORES[20080][1], 400, 20080);
+}
+
+$desde = apiFecha($desdeCrudo, 'desde');
+$hasta = apiFecha($hastaCrudo, 'hasta');
 $cliente = isset($_GET['cliente']) && $_GET['cliente'] !== ''
     ? apiEntero($_GET['cliente'], 'cliente') : null;
 

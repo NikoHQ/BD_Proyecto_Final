@@ -1,3 +1,5 @@
+'use strict';
+
 let statusFilter = '';
 let reservationQuery = '';
 let reservationCourtFilter = '';
@@ -6,80 +8,75 @@ let reservationDateScope = 'today';
 let selectedReservationId = null;
 let reservationPage = 1;
 let reservationPageSize = 10;
-function reservationTable(rows, empty) {
-  return table(['Reserva', 'Cliente', 'Instalación', 'Horario', 'Estado', 'Importe', 'Origen', ''], rows.map(row => [
-    label(row), escapeHtml(row.client), courts[row.court][0], `<span class="text-nowrap">${row.start}–${row.end}</span>`,
-    isActiveTournamentBlock(row) ? tournamentBadge() : badge(row.status), isTournament(row) ? '—' : money.format(row.amount), row.origin, details(row)
-  ]), empty);
+
+/** Pagos ya consultados, por reserva. La fuente sigue siendo SGCD_PKG_PAGOS. */
+const pagosCache = new Map();
+const pagosMedios = { EFECTIVO: 'Efectivo', DEBITO: 'Débito', CREDITO: 'Crédito', TRANSFERENCIA: 'Transferencia' };
+const mediosPagoApi = Object.fromEntries(Object.entries(pagosMedios).map(([api, ui]) => [ui, api]));
+
+const normalRows = () => reservasPanel().filter(row => !row.torneoId);
+const clientForReservation = row => ({ id: row.clienteId, name: row.cliente });
+
+function paymentSummary(row) {
+  const pago = pagosCache.get(row.id);
+  const acordado = Number(row.importe);
+  const pagado = pago && pago.estado === 'PAGADO' ? Number(pago.importe) : 0;
+  if (pago?.estado === 'ANULADO') return { label: 'Anulado', className: 'cancelled', paid: 0, remaining: acordado };
+  if (pagado > 0) return { label: 'Pagado', className: 'completed', paid: pagado, remaining: Math.max(0, acordado - pagado) };
+  return { label: 'Pendiente', className: 'pending', paid: 0, remaining: acordado };
 }
-function reservationStateLabel(row) {
-  return isActiveTournamentBlock(row) ? tournamentBadge() : badge(row.status);
-}
+
+const canRegisterReservationPayment = row =>
+  !row.torneoId && row.estado === 'confirmed' && document.body.dataset.accountRole === 'ADMINISTRADOR';
+
+const reservationStateLabel = row => row.torneoId ? tournamentBadge() : badge(row.estado);
+
 function reservationActionsMenu(row) {
-  if (isTournament(row)) return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end"><li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li></ul></div>`;
-  const editable = ['pending', 'confirmed'].includes(row.status);
+  if (row.torneoId) return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end"><li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li></ul></div>`;
+  const editable = ['pending', 'confirmed'].includes(row.estado);
   return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end">
     <li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li>
-    ${canConfirmReservation(row) && !conflicts(row).length ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Confirmar</button></li>` : ''}
-    ${editable ? `<li><button class="dropdown-item" data-action="edit-reservation-${row.id}">Editar</button></li>` : ''}
+    ${row.estado === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR' ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Confirmar</button></li>` : ''}
+    ${editable ? `<li><button class="dropdown-item" data-action="edit-reservation-${row.id}">Reprogramar</button></li>` : ''}
     ${canRegisterReservationPayment(row) ? `<li><button class="dropdown-item" data-action="payment-reservation-${row.id}">Registrar pago</button></li>` : ''}
     ${editable ? `<li><hr class="dropdown-divider"></li><li><button class="dropdown-item text-danger" data-action="ask-cancel-${row.id}">Cancelar reserva</button></li>` : ''}
-    <li><button class="dropdown-item text-danger" data-action="ask-delete-reservation-${row.id}">Borrar de la maqueta</button></li>
   </ul></div>`;
 }
-function normalRows() {
-  return reservations.filter(row => row.status !== 'maintenance');
-}
-const canConfirmReservation = row => row.status === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR';
-const clientForReservation = row => demoClients.find(client => client.id === row.clientId) ||
-  demoClients.find(client => client.name === row.client);
-function overlaps(a, b) {
-  return a.id !== b.id && courtsShareSpace(a.court, b.court) && a.date === b.date &&
-    a.status !== 'cancelled' && b.status !== 'cancelled' && a.start < b.end && a.end > b.start;
-}
-function conflicts(row) {
-  return allBookings().filter(other => overlaps(row, other));
-}
+
 function reservationFilters(rows) {
   const term = normalizeName(reservationQuery);
   return rows.filter(row => {
-    const [courtName] = courts[row.court];
-    const client = clientForReservation(row);
-    const matchText = !term || [label(row), row.client, client?.rut || '', courtName].some(value => normalizeName(String(value)).includes(term));
-    const matchDate = reservationDateScope === 'all' || row.date === date;
-    const matchStatus = !statusFilter || row.status === statusFilter;
-    const matchCourt = reservationCourtFilter === '' || row.court === Number(reservationCourtFilter);
-    const matchOrigin = !reservationOriginFilter || row.origin === reservationOriginFilter;
+    const matchText = !term || [label(row), row.cliente, row.cancha].some(value =>
+      normalizeName(String(value ?? '')).includes(term));
+    const matchDate = reservationDateScope === 'all' || row.fecha === date;
+    const matchStatus = !statusFilter || row.estado === statusFilter;
+    const matchCourt = reservationCourtFilter === '' || row.canchaId === Number(reservationCourtFilter);
+    const matchOrigin = !reservationOriginFilter || row.origen === reservationOriginFilter;
     return matchText && matchDate && matchStatus && matchCourt && matchOrigin;
-  }).sort(byTime);
+  }).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.start.localeCompare(b.start));
 }
+
 function reservationDetailPanel(row) {
   if (!row) return card('Detalle de reserva', '<div class="card-body"><p class="empty px-0">Selecciona una reserva para ver sus datos y acciones.</p></div>');
-  const [name, site, sport] = courts[row.court];
-  const client = clientForReservation(row);
-  const payment = paymentSummary(row);
-  const conflict = conflicts(row).length > 0;
-  const editable = ['pending', 'confirmed'].includes(row.status) && !isTournament(row);
-  const actions = canConfirmReservation(row) && !conflict ? button(`confirm-${row.id}`, 'Confirmar reserva', 'btn-accent w-100') : '';
+  const editable = ['pending', 'confirmed'].includes(row.estado) && !row.torneoId;
+  const actions = row.estado === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR' ? button(`confirm-${row.id}`, 'Confirmar reserva', 'btn-accent w-100') : '';
   return card('Detalle de reserva', `<div class="card-body reservation-detail">
     <div class="d-flex justify-content-between gap-2 align-items-start"><strong class="fs-5">${label(row)}</strong>${reservationStateLabel(row)}</div>
-    ${conflict ? `<div class="alert alert-danger py-2 mt-3 mb-0 small">${icon('exclamation-triangle-fill')} Hay un cruce de horario que requiere revisión.</div>` : ''}
     <dl class="detail-list">
-      <dt>${icon('person')} Cliente</dt><dd>${escapeHtml(row.client)}${client ? `<small>${client.rut}</small>` : ''}</dd>
-      <dt>${icon('geo-alt')} Cancha</dt><dd>${escapeHtml(name)} · ${escapeHtml(siteName(site))}</dd>
-      <dt>${icon('calendar3')} Fecha</dt><dd>${dayLabel(row.date)}</dd>
+      <dt>${icon('person')} Cliente</dt><dd>${escapeHtml(row.cliente)}</dd>
+      <dt>${icon('geo-alt')} Cancha</dt><dd>${escapeHtml(row.cancha)} · ${escapeHtml(nombreRecinto(canchaPorId(row.canchaId)?.recinto))}</dd>
+      <dt>${icon('calendar3')} Fecha</dt><dd>${dayLabel(row.fecha)}</dd>
       <dt>${icon('clock')} Horario</dt><dd>${row.start}–${row.end}</dd>
-      <dt>${icon('dribbble')} Modalidad</dt><dd>${escapeHtml(row.modality || (isTournament(row) ? tournaments[row.tournamentId].sport : sport))}</dd>
-      <dt>${icon('share')} Origen</dt><dd>${row.origin}</dd>
-      <dt>${icon('cash-stack')} Total</dt><dd>${money.format(row.amount)}</dd>
-      <dt>${icon('credit-card')} Pago</dt><dd><span class="status ${payment.className}">${payment.label}</span></dd>
+      <dt>${icon('dribbble')} Modalidad</dt><dd>${escapeHtml(row.modalidad)}</dd>
+      <dt>${icon('share')} Origen</dt><dd>${escapeHtml(row.origen)}</dd>
+      <dt>${icon('cash-stack')} Total</dt><dd>${money.format(row.importe)}</dd>
     </dl>
-    ${row.payment ? `<div class="payment-history"><strong>Pago registrado</strong><span>${money.format(row.payment.amount)} · ${escapeHtml(row.payment.method)}${row.payment.voided ? ' · Anulado' : ''}</span></div>` : ''}
-    <div class="d-grid gap-2 mt-3">${actions}${editable ? button(`edit-reservation-${row.id}`, `${icon('pencil')} Editar reserva`, 'btn btn-light border') : ''}${canRegisterReservationPayment(row) ? button(`payment-reservation-${row.id}`, `${icon('credit-card')} Registrar pago`, 'btn btn-light border') : ''}${editable ? button(`ask-cancel-${row.id}`, 'Cancelar reserva', 'btn btn-outline-danger') : ''}</div>
+    <div class="d-grid gap-2 mt-3">${actions}${editable ? button(`edit-reservation-${row.id}`, `${icon('pencil')} Reprogramar`, 'btn btn-light border') : ''}${canRegisterReservationPayment(row) ? button(`payment-reservation-${row.id}`, `${icon('credit-card')} Registrar pago`, 'btn btn-light border') : ''}${editable ? button(`ask-cancel-${row.id}`, 'Cancelar reserva', 'btn btn-outline-danger') : ''}</div>
   </div>`);
 }
+
 function reservationsView() {
-  const allRows = [...normalRows(), ...tournamentBookings].filter(row => !isTournament(row) || row.status !== 'cancelled');
+  const allRows = reservasPanel();
   const filtered = reservationFilters(allRows);
   const pageCount = Math.max(1, Math.ceil(filtered.length / reservationPageSize));
   reservationPage = Math.min(reservationPage, pageCount);
@@ -87,132 +84,41 @@ function reservationsView() {
   const visibleRows = filtered.slice(pageStart, pageStart + reservationPageSize);
   if (!selectedReservationId || !filtered.some(row => row.id === selectedReservationId)) selectedReservationId = visibleRows[0]?.id || null;
   const selected = allRows.find(row => row.id === selectedReservationId);
-  const todayRows = normalRows().filter(row => row.date === date && row.status !== 'cancelled');
-  const pendingRows = todayRows.filter(row => row.status === 'pending');
-  const conflictCount = normalRows().filter(row => conflicts(row).length).length;
-  const projected = todayRows.reduce((sum, row) => sum + row.amount, 0);
+  const todayRows = allRows.filter(row => row.fecha === date && row.estado !== 'cancelled');
+  const pendingRows = todayRows.filter(row => row.estado === 'pending');
+  const projected = todayRows.filter(row => !row.torneoId).reduce((sum, row) => sum + row.importe, 0);
   const statusOptions = `<option value="">Todos los estados</option>${Object.entries(statuses).filter(([key]) => key !== 'maintenance').map(([key, value]) => `<option value="${key}" ${key === statusFilter ? 'selected' : ''}>${value}</option>`).join('')}`;
-  const courtOptions = `<option value="">Todas las canchas</option>${courts.map(([name, site], index) => `<option value="${index}" ${reservationCourtFilter !== '' && Number(reservationCourtFilter) === index ? 'selected' : ''}>${escapeHtml(name)} · ${escapeHtml(siteName(site))}</option>`).join('')}`;
+  const courtOptions = `<option value="">Todas las canchas</option>${panel.canchas.map(cancha => `<option value="${cancha.id}" ${reservationCourtFilter !== '' && Number(reservationCourtFilter) === cancha.id ? 'selected' : ''}>${escapeHtml(cancha.nombre)} · ${escapeHtml(nombreRecinto(cancha.recinto))}</option>`).join('')}`;
   const origins = ['', 'Web', 'Mostrador', 'Torneo'];
-  const tableRows = visibleRows.map(row => {
-    const payment = isTournament(row) ? { label: '—', className: 'cancelled' } : paymentSummary(row);
-    return `<tr class="${row.id === selectedReservationId ? 'is-selected' : ''}" data-reservation="${row.id}">
-      <td><button class="reservation-link" data-reservation="${row.id}">${label(row)}</button></td><td>${escapeHtml(row.client)}</td><td>${escapeHtml(courts[row.court][0])}</td><td>${row.start}–${row.end}</td>
-      <td>${reservationStateLabel(row)}</td><td><span class="status ${payment.className}">${payment.label}</span></td><td>${row.origin}</td>
-      <td>${reservationActionsMenu(row)}</td></tr>`;
-  }).join('');
+  const tableRows = visibleRows.map(row => `<tr class="${row.id === selectedReservationId ? 'is-selected' : ''}" data-reservation="${row.id}">
+      <td><button class="reservation-link" data-reservation="${row.id}">${label(row)}</button></td><td>${escapeHtml(row.cliente)}</td><td>${escapeHtml(row.cancha)}</td><td>${row.start}–${row.end}</td>
+      <td>${reservationStateLabel(row)}</td><td>${money.format(row.importe)}</td><td>${escapeHtml(row.origen)}</td>
+      <td>${reservationActionsMenu(row)}</td></tr>`).join('');
   const actions = `<a class="btn btn-outline-secondary" href="/dashboardadmin/solicitudes-web.php">Solicitudes web</a>
     ${button('new', `${icon('plus-lg')} Nueva reserva`, 'btn-accent')}`;
   return `${heading('Reservas', 'Gestiona reservas, confirmaciones y pagos.', actions)}
-    <div class="row g-2 mb-3">${metric('calendar2-check', 'Reservas del día', todayRows.length)}${metric('hourglass-split', 'Por confirmar', pendingRows.length)}${metric('exclamation-triangle', 'Con conflicto', conflictCount)}${metric('cash-stack', 'Ingresos proyectados', money.format(projected))}</div>
+    <div class="row g-2 mb-3">${metric('calendar2-check', 'Reservas del día', todayRows.length)}${metric('hourglass-split', 'Por confirmar', pendingRows.length)}${metric('exclamation-triangle', 'Torneos del día', todayRows.filter(row => row.torneoId).length)}${metric('cash-stack', 'Ingresos del día', money.format(projected))}</div>
     <div class="row g-3 reservation-layout"><div class="col-12 col-xxl-9">${card(`Reservas del ${dateLabel.format(new Date(`${date}T12:00:00`))}`, `<div class="card-body border-bottom reservation-tools">
-      <div class="toolbar"><input id="reservation-query" type="search" class="form-control" value="${escapeHtml(reservationQuery)}" placeholder="Buscar por ID, cliente, RUT o cancha" aria-label="Buscar reservas"><div class="btn-group" role="group" aria-label="Periodo"><button class="btn btn-sm ${reservationDateScope === 'today' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-today">Día</button><button class="btn btn-sm ${reservationDateScope === 'all' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-all">Todas</button></div></div>
+      <div class="toolbar"><input id="reservation-query" type="search" class="form-control" value="${escapeHtml(reservationQuery)}" placeholder="Buscar por ID, cliente o cancha" aria-label="Buscar reservas"><div class="btn-group" role="group" aria-label="Periodo"><button class="btn btn-sm ${reservationDateScope === 'today' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-today">Día</button><button class="btn btn-sm ${reservationDateScope === 'all' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-all">Todas</button></div></div>
       <div class="toolbar mt-2"><select id="reservation-status" class="form-select" aria-label="Filtrar por estado">${statusOptions}</select><select id="reservation-court" class="form-select" aria-label="Filtrar por cancha">${courtOptions}</select><select id="reservation-origin" class="form-select" aria-label="Filtrar por origen">${origins.map(origin => `<option value="${origin}" ${origin === reservationOriginFilter ? 'selected' : ''}>${origin || 'Todos los orígenes'}</option>`).join('')}</select><button class="btn btn-link ms-auto" data-action="clear-reservation-filters">Limpiar filtros</button></div></div>
-      ${filtered.length ? `<div class="table-responsive"><table class="table table-hover reservation-table mb-0"><thead><tr><th>ID</th><th>Cliente</th><th>Cancha</th><th>Horario</th><th>Estado</th><th>Pago</th><th>Origen</th><th></th></tr></thead><tbody>${tableRows}</tbody></table></div><div class="reservation-pagination"><span>Mostrando ${pageStart + 1}–${Math.min(pageStart + reservationPageSize, filtered.length)} de ${filtered.length}</span><div class="toolbar"><label>Filas <select id="reservation-page-size" class="form-select form-select-sm" aria-label="Filas por página">${[5, 10, 20, 50].map(size => `<option value="${size}" ${size === reservationPageSize ? 'selected' : ''}>${size}</option>`).join('')}</select></label><button class="btn btn-sm btn-light border" data-action="reservation-previous" ${reservationPage === 1 ? 'disabled' : ''}>${icon('chevron-left')}</button><span class="small">${reservationPage} / ${pageCount}</span><button class="btn btn-sm btn-light border" data-action="reservation-next" ${reservationPage === pageCount ? 'disabled' : ''}>${icon('chevron-right')}</button></div></div>` : '<p class="empty">No hay reservas para los filtros aplicados.</p>'}`) }</div><div class="col-12 col-xxl-3">${reservationDetailPanel(selected)}</div></div>`;
+      ${filtered.length ? `<div class="table-responsive"><table class="table table-hover reservation-table mb-0"><thead><tr><th>ID</th><th>Cliente</th><th>Cancha</th><th>Horario</th><th>Estado</th><th>Importe</th><th>Origen</th><th></th></tr></thead><tbody>${tableRows}</tbody></table></div><div class="reservation-pagination"><span>Mostrando ${pageStart + 1}–${Math.min(pageStart + reservationPageSize, filtered.length)} de ${filtered.length}</span><div class="toolbar"><label>Filas <select id="reservation-page-size" class="form-select form-select-sm" aria-label="Filas por página">${[5, 10, 20, 50].map(size => `<option value="${size}" ${size === reservationPageSize ? 'selected' : ''}>${size}</option>`).join('')}</select></label><button class="btn btn-sm btn-light border" data-action="reservation-previous" ${reservationPage === 1 ? 'disabled' : ''}>${icon('chevron-left')}</button><span class="small">${reservationPage} / ${pageCount}</span><button class="btn btn-sm btn-light border" data-action="reservation-next" ${reservationPage === pageCount ? 'disabled' : ''}>${icon('chevron-right')}</button></div></div>` : '<p class="empty">No hay reservas para los filtros aplicados.</p>'}`) }</div><div class="col-12 col-xxl-3">${reservationDetailPanel(selected)}</div></div>`;
 }
-function updateReservationClientResults() {
-  const query = $('reservation-client-query').value.trim();
-  $('reservation-client-id').value = '';
-  const exactRut = parseRut(query);
-  const rutQuery = compactRut(query);
-  const nameQuery = normalizeName(query);
-  const matches = query ? demoClients.filter(client => exactRut
-    ? client.rut === exactRut
-    : normalizeName(client.name).includes(nameQuery) || (rutQuery && compactRut(client.rut).includes(rutQuery))) : [];
-  const list = $('reservation-client-results');
-  const status = $('reservation-client-status');
-  const limit = 5;
-  list.innerHTML = matches.slice(0, limit).map(client =>
-    button(`select-reservation-client-${client.id}`, escapeHtml(`${client.name} · ${client.rut}`), 'list-group-item list-group-item-action text-start')
-  ).join('');
-  if (exactRut && !matches.length) {
-    list.innerHTML = button('open-reservation-client-create', `Crear cliente con RUT ${escapeHtml(exactRut)}`, 'list-group-item list-group-item-action text-start');
-  }
-  list.hidden = !list.children.length;
-  status.textContent = matches.length > limit ? 'Se muestran 5 coincidencias. Afina la búsqueda.' : '';
-  if (query && !matches.length) status.textContent = exactRut ? 'El RUT no tiene ficha de cliente.' : 'Sin coincidencias. Para crear una ficha, ingresa el RUT completo con DV.';
-}
-function selectReservationClient(client) {
-  if (!clientActive(client)) {
-    $('reservation-client-status').textContent = 'La ficha está inactiva.';
-    return;
-  }
-  $('reservation-client-id').value = client.id;
-  $('reservation-client-query').value = `${client.name} · ${client.rut}`;
-  $('reservation-client-status').textContent = 'Cliente seleccionado.';
-  $('reservation-client-results').hidden = true;
-  $('reservation-client-results').replaceChildren();
-  $('reservation-client-query').focus();
-}
-function toggleReservationClientCreate(open) {
-  const query = $('reservation-client-query');
-  const fields = $('reservation-client-create-fields');
-  fields.hidden = !open;
-  fields.disabled = !open;
-  query.readOnly = open;
-  if (open) {
-    fields.querySelector('[name="reservationClientRut"]').value = parseRut(query.value) || '';
-    $('reservation-client-results').hidden = true;
-    fields.querySelector('input').focus();
-  } else {
-    if (!$('reservation-client-id').value) updateReservationClientResults();
-    query.focus();
-  }
-}
-function saveReservationClient() {
-  const fields = $('reservation-client-create-fields');
-  if ([...fields.querySelectorAll('input')].some(field => !field.reportValidity())) return;
-  const form = $('reservation-form') || $('edit-reservation-form');
-  const name = form.elements.reservationClientName.value.trim();
-  const rut = parseRut(form.elements.reservationClientRut.value);
-  const email = form.elements.reservationClientEmail.value.trim().toLowerCase();
-  const error = $('reservation-client-create-error');
-  if (!name || !rut) { error.textContent = 'Ingresa el nombre y un RUT válido.'; return; }
-  let client = demoClients.find(entry => entry.rut === rut);
-  if (!client) {
-    if (email && demoClients.some(entry => entry.email === email)) {
-      error.textContent = 'Ese correo ya está asociado a otra ficha.';
-      return;
-    }
-    client = { id: nextClientId++, name, rut, phone: form.elements.reservationClientPhone.value.trim(), email, type: 'Persona' };
-    demoClients.push(client);
-    saveManagement();
-  }
-  fields.querySelectorAll('input').forEach(input => { input.value = ''; });
-  error.textContent = '';
-  selectReservationClient(client);
-  toggleReservationClientCreate(false);
-}
-function reservationDetails(id) {
-  const row = allBookings().find(r => r.id === id);
-  if (!row) return;
-  const [name, site, sport] = courts[row.court];
-  if (isTournament(row)) {
-    showDialog('Bloque de torneo', `<div class="d-flex justify-content-between gap-2 mb-3"><strong>${escapeHtml(row.client)}</strong>${row.status === 'cancelled' ? badge('cancelled') : tournamentBadge()}</div>
-      <dl class="row"><dt class="col-4">Actividad</dt><dd class="col-8">${escapeHtml(row.activity)}</dd><dt class="col-4">Cancha</dt><dd class="col-8">${escapeHtml(name)} · ${escapeHtml(siteName(site))}</dd><dt class="col-4">Horario</dt><dd class="col-8">${dayLabel(row.date)} · ${row.start}–${row.end}</dd></dl>
-      <button class="btn btn-accent" data-tournament="${row.tournamentId}" data-day="${row.date}">Ver torneo</button>`);
-    return;
-  }
-  const crossings = conflicts(row);
-  const actions = ['pending', 'confirmed'].includes(row.status)
-    ? `<div class="d-flex flex-wrap gap-2">${canConfirmReservation(row) && !crossings.length ? button(`confirm-${id}`, 'Confirmar reserva', 'btn-accent') : ''}${button(`ask-cancel-${id}`, 'Cancelar reserva', 'btn-outline-danger')}</div>`
-    : '';
-  const warning = crossings.length ? `<div class="alert alert-danger"><strong>${icon('exclamation-triangle-fill')} Conflicto en esta instalación</strong>
-    <p class="small mb-2">Los horarios de estas reservas se cruzan en la misma cancha. Cancela una de las reservas para liberar el bloque.</p>
-    ${crossings.map(other => `<div class="d-flex align-items-center justify-content-between gap-2 mb-1"><span>${escapeHtml(other.client)} · ${other.start}–${other.end}</span>${details(other, 'Ver')}</div>`).join('')}</div>` : '';
-  showDialog(row.status === 'maintenance' ? 'Mantención' : `Reserva ${label(row)}`, `
-    <div class="d-flex justify-content-between align-items-start gap-2 mb-3"><strong>${escapeHtml(row.client)}</strong>${badge(row.status)}</div>${warning}
-    <dl class="row mb-3"><dt class="col-4">Instalación</dt><dd class="col-8">${escapeHtml(name)} · ${escapeHtml(siteName(site))}</dd><dt class="col-4">Modalidad</dt><dd class="col-8">${sport}</dd><dt class="col-4">Horario</dt><dd class="col-8">${row.date} · ${row.start}–${row.end}</dd>${row.status !== 'maintenance' ? `<dt class="col-4">Origen</dt><dd class="col-8">${row.origin}</dd><dt class="col-4">Importe</dt><dd class="col-8">${money.format(row.amount)}</dd>` : ''}</dl>${actions}`);
-}
-function reservationClientPicker(row = null) {
-  const client = row ? clientForReservation(row) : null;
-  const text = client ? `${client.name} · ${client.rut}` : '';
+
+/* ------------------------------------------------------------------ */
+/* Alta y reprogramación                                               */
+/* ------------------------------------------------------------------ */
+
+let clienteSeleccionado = null;
+let clienteBusqueda = null;
+let clientesEncontrados = [];
+
+function clientPickerFields() {
+  const text = clienteSeleccionado ? `${clienteSeleccionado.nombre} · ${clienteSeleccionado.rut}` : '';
   return `<div class="col-12"><label class="form-label" for="reservation-client-query">Cliente</label>
-    <input class="form-control" type="search" id="reservation-client-query" value="${escapeHtml(text)}" placeholder="Escribe el RUT o nombre del cliente" aria-describedby="reservation-client-help" autocomplete="off">
-    <input type="hidden" id="reservation-client-id" name="clientId" value="${client?.id || ''}">
+    <input class="form-control" type="search" id="reservation-client-query" value="${escapeHtml(text)}" placeholder="Escribe el RUT o nombre del cliente" autocomplete="off">
+    <input type="hidden" id="reservation-client-id" name="clientId" value="${clienteSeleccionado?.id || ''}">
     <div id="reservation-client-results" class="list-group mt-1" role="group" aria-label="Coincidencias de clientes" hidden></div>
     <p id="reservation-client-status" class="small text-secondary mb-0" role="status"></p>
-    <p id="reservation-client-help" class="form-text">Selecciona una ficha existente o crea una con un RUT válido.</p>
     <fieldset id="reservation-client-create-fields" class="border rounded p-3 mt-2" hidden disabled>
       <legend class="fs-6 fw-semibold">Nueva ficha de cliente</legend>
       <div class="row g-2">
@@ -229,100 +135,201 @@ function reservationClientPicker(row = null) {
     </fieldset>
   </div>`;
 }
-function bookingCourtOptions(current = null) {
-  const preferred = current ?? courts.findIndex((court, i) => court[1] === venue && courtAvailable(i));
-  return courts.map(([name, site], index) => {
-    if (index !== current && !courtAvailable(index)) return '';
-    return selectOption(index, name + ' · ' + siteName(site), index === preferred);
-  }).join('');
+
+function updateReservationClientResults() {
+  const query = $('reservation-client-query')?.value.trim() || '';
+  const lista = $('reservation-client-results');
+  const estado = $('reservation-client-status');
+  if (!lista) return;
+  clearTimeout(clienteBusqueda);
+  if (query.length < 2) {
+    lista.hidden = true;
+    lista.replaceChildren();
+    estado.textContent = '';
+    return;
+  }
+  clienteBusqueda = setTimeout(async () => {
+    try {
+      const datos = await clientesApi.buscar(query);
+      clientesEncontrados = datos.items;
+      lista.innerHTML = clientesEncontrados.map(cliente =>
+        button(`select-reservation-client-${cliente.id}`, escapeHtml(`${cliente.nombre} · ${cliente.rut}`), 'list-group-item list-group-item-action text-start')
+      ).join('');
+      if (!clientesEncontrados.length && parseRut(query)) {
+        lista.innerHTML = button('open-reservation-client-create', `Crear cliente con RUT ${escapeHtml(parseRut(query))}`, 'list-group-item list-group-item-action text-start');
+      }
+      lista.hidden = !lista.children.length;
+      estado.textContent = datos.total > clientesEncontrados.length ? 'Se muestran las primeras coincidencias. Afina la búsqueda.' : '';
+      if (!clientesEncontrados.length && !parseRut(query)) estado.textContent = 'Sin coincidencias. Para crear una ficha, ingresa el RUT completo con DV.';
+    } catch (error) {
+      estado.textContent = error.message;
+    }
+  }, 250);
 }
+
+function selectReservationClient(cliente) {
+  clienteSeleccionado = cliente;
+  $('reservation-client-id').value = cliente.id;
+  $('reservation-client-query').value = `${cliente.nombre} · ${cliente.rut}`;
+  $('reservation-client-status').textContent = 'Cliente seleccionado.';
+  $('reservation-client-results').hidden = true;
+  $('reservation-client-results').replaceChildren();
+}
+
+function toggleReservationClientCreate(open) {
+  const campos = $('reservation-client-create-fields');
+  const consulta = $('reservation-client-query');
+  if (!campos) return;
+  campos.hidden = !open;
+  campos.disabled = !open;
+  consulta.readOnly = open;
+  if (open) {
+    campos.querySelector('[name="reservationClientRut"]').value = parseRut(consulta.value) || '';
+    $('reservation-client-results').hidden = true;
+    campos.querySelector('input').focus();
+  } else {
+    consulta.focus();
+  }
+}
+
+async function saveReservationClient() {
+  const campos = $('reservation-client-create-fields');
+  if ([...campos.querySelectorAll('input')].some(field => !field.reportValidity())) return;
+  const error = $('reservation-client-create-error');
+  const datos = {
+    nombre: campos.querySelector('[name="reservationClientName"]').value.trim(),
+    rut: campos.querySelector('[name="reservationClientRut"]').value.trim(),
+    telefono: campos.querySelector('[name="reservationClientPhone"]').value.trim(),
+    correo: campos.querySelector('[name="reservationClientEmail"]').value.trim().toLowerCase()
+  };
+  error.textContent = '';
+  try {
+    const ficha = await clientesApi.crear(datos);
+    selectReservationClient({ id: ficha.id, nombre: ficha.nombre, rut: ficha.rut });
+    toggleReservationClientCreate(false);
+    feedback('Ficha de cliente creada.');
+  } catch (fallo) {
+    error.textContent = fallo.message;
+  }
+}
+
+function canchaOpciones(seleccion = null) {
+  return panel.canchas.filter(cancha => canchaDisponible(cancha.id) || cancha.id === seleccion).map(cancha =>
+    selectOption(cancha.id, `${cancha.nombre} · ${nombreRecinto(cancha.recinto)}`, cancha.id === seleccion)).join('');
+}
+
+function modalidadOpciones(canchaId, seleccion = null) {
+  return (canchaPorId(canchaId)?.modalidades || []).map(modalidad =>
+    selectOption(modalidad.id, modalidad.nombre, modalidad.id === seleccion)).join('');
+}
+
+const bloquesEntre = (inicio, fin) => (minutes(fin) - minutes(inicio)) / 60;
+
+function camposHorario(inicio, fin) {
+  return `<div class="col-6">${clockField('start', 'Inicio', inicio)}</div><div class="col-6">${clockField('end', 'Término', fin, { end: true })}</div>`;
+}
+
 function newReservation() {
-  const preferred = courts.findIndex((court, i) => court[1] === venue && courtAvailable(i));
-  const firstCourt = preferred === -1 ? courts.findIndex((_, i) => courtAvailable(i)) : preferred;
+  clienteSeleccionado = null;
+  const cancha = panel.canchas.find(entry => canchaDisponible(entry.id) &&
+    (!venue || String(entry.recinto) === String(venue))) || panel.canchas.find(entry => canchaDisponible(entry.id));
+  if (!cancha) return feedback('No hay canchas disponibles para reservar.');
   showDialog('Nueva reserva', `<form id="reservation-form" class="row g-3">
-    ${reservationClientPicker()}
-    <div class="col-12"><label class="form-label" for="court">Instalación</label><select class="form-select" id="court" name="court" required>${bookingCourtOptions()}</select></div>
-    <div class="col-12">${editSelect('modality', 'Modalidad', courtModes(firstCourt).map(mode => [mode, mode]))}</div>
-    <div class="col-12"><label class="form-label" for="booking-day">Fecha</label><input type="date" id="booking-day" class="form-control" name="date" value="${date}" required></div>
-    <div class="col-6">${clockField("start", "Inicio", "16:00")}</div>
-    <div class="col-6">${clockField("end", "Término", "17:00", { end: true })}</div>
-    ${reservationPricingFields()}
+    ${clientPickerFields()}
+    <div class="col-12"><label class="form-label" for="court">Instalación</label><select class="form-select" id="court" name="court" required>${canchaOpciones(cancha.id)}</select></div>
+    <div class="col-12">${editSelect('modality', 'Modalidad', (cancha.modalidades).map(m => [m.id, m.nombre]), cancha.modalidades[0]?.id)}</div>
+    <div class="col-12"><label class="form-label" for="booking-day">Fecha</label><input type="date" id="booking-day" class="form-control" name="date" value="${date}" min="${localClock()[0]}" required></div>
+    ${camposHorario('16:00', '17:00')}
+    <div class="col-12"><div class="border rounded p-3 pricing-box"><h3 class="h6">Precio de la reserva</h3>
+      <output class="fw-semibold" data-price-preview aria-live="polite">Completa cancha, fecha y horario.</output></div></div>
     <p class="small text-secondary mb-0">Origen: Mostrador · Estado inicial: Confirmada</p>
     <div id="form-error" class="text-danger small" role="alert"></div>
     <div class="d-flex justify-content-end"><button class="btn btn-accent" type="submit">Guardar reserva</button></div>
   </form>`);
   updateReservationQuote($('reservation-form'));
 }
+
 function editReservation(id) {
-  const row = reservations.find(entry => entry.id === id);
-  if (!row || !['pending', 'confirmed'].includes(row.status)) return;
-  showDialog(`Editar ${label(row)}`, `<form id="edit-reservation-form" data-reservation-id="${id}" class="row g-3">
-    ${reservationClientPicker(row)}
-    <div class="col-12"><label class="form-label">Instalación<select class="form-select" name="court" required>${bookingCourtOptions(row.court)}</select></label></div>
-    <div class="col-12">${editSelect('modality', 'Modalidad', courtModes(row.court).map(mode => [mode, mode]), row.modality || courtModes(row.court)[0])}</div>
-    <div class="col-12"><label class="form-label">Fecha<input class="form-control" type="date" name="date" value="${row.date}" required></label></div>
-    <div class="col-6">${clockField("start", "Inicio", row.start)}</div>
-    <div class="col-6">${clockField("end", "Término", row.end, { end: true })}</div>
-    ${reservationPricingFields()}<p id="edit-reservation-error" class="text-danger small mb-0" role="alert"></p>
+  const row = reservaPorId(id);
+  if (!row || !['pending', 'confirmed'].includes(row.estado) || row.torneoId) return;
+  showDialog(`Reprogramar ${label(row)}`, `<form id="edit-reservation-form" data-reservation-id="${id}" class="row g-3">
+    <div class="col-12"><dl class="row mb-0"><dt class="col-4">Cliente</dt><dd class="col-8">${escapeHtml(row.cliente)}</dd>
+      <dt class="col-4">Cancha</dt><dd class="col-8">${escapeHtml(row.cancha)} · ${escapeHtml(row.modalidad)}</dd></dl></div>
+    <div class="col-12"><label class="form-label">Fecha<input class="form-control" type="date" name="date" value="${row.fecha}" required></label></div>
+    ${camposHorario(row.start, row.end)}
+    <div class="col-12"><output class="fw-semibold" data-price-preview aria-live="polite"></output></div>
+    <p id="edit-reservation-error" class="text-danger small mb-0" role="alert"></p>
     <div class="d-flex justify-content-end"><button class="btn btn-accent">Guardar cambios</button></div></form>`);
   updateReservationQuote($('edit-reservation-form'));
 }
-function saveReservationEdit(form) {
-  const row = reservations.find(entry => entry.id === Number(form.dataset.reservationId));
-  if (!row || !['pending', 'confirmed'].includes(row.status)) return;
-  const values = Object.fromEntries(new FormData(form));
-  const court = Number(values.court);
+
+function datosReserva(form) {
+  const valores = Object.fromEntries(new FormData(form));
+  const canchaId = Number(valores.court ?? reservaPorId(Number(form.dataset.reservationId))?.canchaId);
+  const modalidadId = Number(valores.modality ?? reservaPorId(Number(form.dataset.reservationId))?.modalidadId);
+  return { cancha: canchaId, modalidad: modalidadId, fecha: valores.date || valores.fecha, hora: valores.start,
+    bloques: bloquesEntre(valores.start, valores.end) };
+}
+
+async function updateReservationQuote(form) {
+  const preview = form?.querySelector('[data-price-preview]');
+  if (!preview) return;
+  const datos = datosReserva(form);
+  if (!datos.fecha || !validClock(datos.hora) || !validClock((new FormData(form)).get('end') || '', true) ||
+      !Number.isInteger(datos.bloques) || datos.bloques < 1) {
+    preview.textContent = 'Elige una fecha y un horario de bloques completos.';
+    preview.classList.add('text-danger');
+    return;
+  }
+  preview.textContent = 'Consultando tarifa…';
+  try {
+    const cotizacion = await reservasApi.cotizar(datos);
+    preview.textContent = 'Total · ' + money.format(cotizacion.total);
+    preview.classList.remove('text-danger');
+    preview.classList.add('text-success');
+  } catch (error) {
+    preview.textContent = error.message;
+    preview.classList.add('text-danger');
+  }
+}
+
+async function submitNewReservation(form) {
+  const error = $('form-error');
+  error.textContent = '';
+  const datos = datosReserva(form);
+  if (!clienteSeleccionado) { error.textContent = 'Selecciona un cliente.'; return; }
+  if (!datos.fecha || !validClock(datos.hora) || !Number.isInteger(datos.bloques) || datos.bloques < 1) {
+    error.textContent = 'Elige una fecha y un horario de bloques completos.'; return;
+  }
+  try {
+    const { id } = await reservasApi.crear({ ...datos, cliente: clienteSeleccionado.id });
+    date = datos.fecha;
+    dialog.hide();
+    await recargarAgenda(date);
+    feedback(`Reserva #R-${id} creada.`);
+    render();
+  } catch (fallo) {
+    error.textContent = fallo.message;
+  }
+}
+
+async function saveReservationEdit(form) {
+  const row = reservaPorId(Number(form.dataset.reservationId));
   const error = $('edit-reservation-error');
-  const client = demoClients.find(entry => entry.id === Number(values.clientId));
-  if (!client || (!clientActive(client) && client.id !== row.clientId) ||
-      (!courtAvailable(court) && court !== row.court) || minutes(values.end) <= minutes(values.start)) {
-    error.textContent = 'Selecciona un cliente y un horario válido.';
-    return;
+  if (!row) return;
+  const datos = datosReserva(form);
+  if (!datos.fecha || !validClock(datos.hora) || !Number.isInteger(datos.bloques) || datos.bloques < 1) {
+    error.textContent = 'Elige una fecha y un horario de bloques completos.'; return;
   }
-  const proposed = { ...row, court, date: values.date, start: values.start, end: values.end };
-  const occupied = allBookings().filter(other => overlaps(other, proposed));
-  if (occupied.length) {
-    error.textContent = `La cancha está ocupada de ${occupied[0].start} a ${occupied[0].end}.`;
-    return;
+  try {
+    await reservasApi.reprogramar({ id: row.id, fecha: datos.fecha, hora: datos.hora, bloques: datos.bloques });
+    dialog.hide();
+    await recargarAgenda(datos.fecha);
+    feedback(`Reserva ${label(row)} reprogramada.`);
+    render();
+  } catch (fallo) {
+    error.textContent = fallo.message;
   }
-  const quote = reservationQuote(values, row);
-  if (quote.error) { error.textContent = quote.error; return; }
-  if (quote.amount < paymentSummary(row).paid) {
-    error.textContent = 'El nuevo total es menor que los pagos registrados.';
-    return;
-  }
-  Object.assign(row, { client: client.name, court, date: values.date, start: values.start, end: values.end,
-    clientId: client.id, modality: values.modality, ...quote });
-  selectedReservationId = row.id;
-  save(`Reserva ${label(row)} actualizada.`);
-}
-function reservationPricingFields() {
-  return '<div class="col-12"><div class="border rounded p-3 pricing-box"><h3 class="h6">Precio de la reserva</h3>' +
-    '<output class="fw-semibold" data-price-preview aria-live="polite"></output></div></div>';
-}
-
-function reservationQuote(values, row = null) {
-  const court = Number(values.court);
-  if (!values.date || !validClock(values.start) || !validClock(values.end, true) || values.start >= values.end ||
-      !courtModes(court).includes(values.modality)) return { error: 'Selecciona instalación, modalidad, fecha y horario válidos.' };
-  if (row && row.court === court && row.date === values.date && row.start === values.start &&
-      row.end === values.end && (row.modality || courtModes(row.court)[0]) === values.modality) {
-    return { amount: row.amount, tariffIds: row.tariffIds };
-  }
-  if (!bookingUsesHourlyBlocks(court, values.date, values.start, values.end)) {
-    return { error: 'Elige bloques consecutivos de una hora dentro del horario del recinto.' };
-  }
-  return automaticQuote(court, values.modality, values.date, values.start, values.end) ||
-    { error: 'No hay tarifa activa para todo el horario. Revisa Tarifas.' };
-}
-
-function updateReservationQuote(form) {
-  const row = reservations.find(row => row.id === Number(form.dataset.reservationId));
-  const quote = reservationQuote(Object.fromEntries(new FormData(form)), row);
-  const preview = form.querySelector('[data-price-preview]');
-  preview.classList.toggle('text-danger', Boolean(quote.error));
-  preview.classList.toggle('text-success', !quote.error);
-  preview.textContent = quote.error || 'Total · ' + money.format(quote.amount);
 }
 
 document.addEventListener('input', event => {
@@ -331,42 +338,40 @@ document.addEventListener('input', event => {
 });
 
 document.addEventListener('change', event => {
-  const form = event.target.form;
-  if (event.target.name !== 'court' || !form?.elements.mode && !form?.elements.modality) return;
-  const select = form.elements.mode || form.elements.modality;
-  select.innerHTML = courtModes(Number(event.target.value)).map(mode => selectOption(mode, mode)).join('');
-  if (form.querySelector('[data-price-preview]')) updateReservationQuote(form);
+  if (event.target.name === 'court' && $('reservation-form')) {
+    const canchaId = Number(event.target.value);
+    const select = $('reservation-form').elements.modality;
+    select.innerHTML = modalidadOpciones(canchaId);
+    updateReservationQuote($('reservation-form'));
+  }
+  if (event.target.id === 'booking-day' || event.target.name === 'date') {
+    const form = event.target.form;
+    if (form?.querySelector('[data-price-preview]')) updateReservationQuote(form);
+  }
 });
 
-function submitNewReservation(element) {
-  const form = Object.fromEntries(new FormData(element));
-  const court = Number(form.court);
-  const client = demoClients.find(entry => entry.id === Number(form.clientId));
-  if (!client || !clientActive(client) || !courtAvailable(court) || minutes(form.end) <= minutes(form.start)) {
-    $('form-error').textContent = 'Selecciona un cliente activo, una cancha disponible y un horario válido.';
-    return;
-  }
-  const quote = reservationQuote(form);
-  if (quote.error) { $('form-error').textContent = quote.error; return; }
-  const occupied = allBookings().filter(row => overlaps(row, { court, date: form.date, start: form.start, end: form.end }));
-  const tournament = occupied.find(isTournament);
-  if (occupied.length) {
-    $('form-error').textContent = tournament ? `La cancha está reservada para ${tournament.client} (${tournament.start}–${tournament.end}).` : 'La instalación ya está ocupada en ese horario.';
-    return;
-  }
-  let id = Math.max(10450, ...reservations.map(r => r.id)) + 1;
-  try {
-    id = nextReservationId();
-    localStorage.setItem('sgcd-demo-last-reservation', String(id));
-  } catch { /* The ID remains unique within the current demo rows. */ }
-  reservations.push({
-    id, court, client: client.name, start: form.start, end: form.end, date: form.date,
-    clientId: client.id,
-    status: 'confirmed', origin: 'Mostrador', modality: form.modality, ...quote
-  });
-  date = form.date;
-  if (venue) venue = courts[court][1];
-  if (activePage() === 'reservas') statusFilter = '';
-  courtQuery = '';
-  save(`Reserva #R-${id} creada.`);
+/** Tabla compacta de reservas para los dialogos de clientes. */
+function reservationTable(rows, empty = 'Sin reservas registradas.') {
+  return table(['Reserva', 'Cliente', 'Instalación', 'Horario', 'Estado', 'Importe'], rows.map(row => [
+    label(row), escapeHtml(row.cliente), escapeHtml(row.cancha),
+    `<span class="text-nowrap">${row.fecha} · ${row.start}–${row.end}</span>`,
+    reservationStateLabel(row), money.format(row.importe)
+  ]), empty);
+}
+
+function reservationDetails(id) {
+  const row = reservaPorId(id);
+  if (!row) return;
+  const editable = ['pending', 'confirmed'].includes(row.estado) && !row.torneoId;
+  const acciones = row.torneoId
+    ? `<button class="btn btn-accent" type="button" data-action="tournament-agenda-${row.torneoId}">Ver torneo</button>`
+    : `<div class="d-flex flex-wrap gap-2">${row.estado === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR' ? button(`confirm-${id}`, 'Confirmar reserva', 'btn-accent') : ''}${editable ? button(`edit-reservation-${id}`, 'Reprogramar') : ''}${canRegisterReservationPayment(row) ? button(`payment-reservation-${id}`, 'Registrar pago') : ''}${editable ? button(`ask-cancel-${id}`, 'Cancelar reserva', 'btn-outline-danger') : ''}</div>`;
+  showDialog(`Reserva ${label(row)}`, `
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-3"><strong>${escapeHtml(row.cliente)}</strong>${reservationStateLabel(row)}</div>
+    <dl class="row mb-3"><dt class="col-4">Instalación</dt><dd class="col-8">${escapeHtml(row.cancha)} · ${escapeHtml(nombreRecinto(canchaPorId(row.canchaId)?.recinto))}</dd>
+      <dt class="col-4">Modalidad</dt><dd class="col-8">${escapeHtml(row.modalidad)}</dd>
+      <dt class="col-4">Horario</dt><dd class="col-8">${row.fecha} · ${row.start}–${row.end}</dd>
+      <dt class="col-4">Origen</dt><dd class="col-8">${escapeHtml(row.origen)}</dd>
+      <dt class="col-4">Importe</dt><dd class="col-8">${money.format(row.importe)}</dd></dl>
+    ${acciones}`);
 }
