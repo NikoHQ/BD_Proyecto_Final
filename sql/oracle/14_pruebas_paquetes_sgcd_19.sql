@@ -909,3 +909,873 @@ BEGIN
     END IF;
 END;
 /
+
+DECLARE
+    V_FALLAS NUMBER := 0;
+
+    PROCEDURE OK (P_TEXTO VARCHAR2) IS
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('OK    ' || P_TEXTO);
+    END;
+
+    PROCEDURE FALLA (P_TEXTO VARCHAR2) IS
+    BEGIN
+        V_FALLAS := V_FALLAS + 1;
+        DBMS_OUTPUT.PUT_LINE('FALLA ' || P_TEXTO);
+    END;
+
+    PROCEDURE COMPROBAR (P_CONDICION BOOLEAN, P_TEXTO VARCHAR2) IS
+    BEGIN
+        IF P_CONDICION THEN OK(P_TEXTO); ELSE FALLA(P_TEXTO); END IF;
+    END;
+
+    PROCEDURE ESPERAR_ERROR (P_BLOQUE VARCHAR2, P_CODIGO NUMBER, P_NOMBRE VARCHAR2) IS
+    BEGIN
+        EXECUTE IMMEDIATE P_BLOQUE;
+        FALLA(P_NOMBRE || ' (se acepto y debia rechazarse)');
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = P_CODIGO THEN
+                OK(P_NOMBRE);
+            ELSE
+                FALLA(P_NOMBRE || ' (ORA-' || SQLCODE || ', se esperaba ORA-' || P_CODIGO || ')');
+            END IF;
+    END;
+
+BEGIN
+DBMS_OUTPUT.PUT_LINE('--- UNIDAD 7: SGCD_PKG_RESERVAS');
+
+    DECLARE
+        V_CLI      NUMBER;
+        V_INAC     NUMBER;
+        V_CREADA   BOOLEAN;
+        V_ADMIN    NUMBER;
+        V_R1       NUMBER;
+        V_R2       NUMBER;
+        V_R3       NUMBER;
+        V_R4       NUMBER;
+        V_R5       NUMBER;
+        V_R6       NUMBER;
+        V_R7       NUMBER;
+        V_R8       NUMBER;
+        V_ESTADO   VARCHAR2(15);
+        V_IMPORTE  NUMBER(12,2);
+        V_ADMIN_R  NUMBER;
+        V_CANTIDAD NUMBER;
+        V_HORA     VARCHAR2(5);
+        V_MARTES   DATE := TRUNC(SYSDATE, 'IW') + 8;
+
+    BEGIN
+
+    SGCD_PKG_CLIENTES.crear_ficha(32000001, '7', 'Cliente Reservas', NULL, NULL,
+                                  V_CLI, V_CREADA);
+    SGCD_PKG_CLIENTES.crear_ficha(32000002, '5', 'Cliente Inactivo', NULL, NULL,
+                                  V_INAC, V_CREADA);
+    SGCD_PKG_CLIENTES.cambiar_estado(V_INAC, 'INACTIVO');
+    SELECT MIN(a.ID_ADMINISTRADOR) INTO V_ADMIN
+    FROM   SGCD_ADMINISTRADORES a
+    WHERE  a.ESTADO_ADMINISTRADOR = 'ACTIVO';
+
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '10:00', 1,
+                                    'MOSTRADOR', V_R1);
+    SELECT r.ESTADO_RESERVA, r.IMPORTE_ACORDADO, r.ID_ADMINISTRADOR
+    INTO   V_ESTADO, V_IMPORTE, V_ADMIN_R
+    FROM   SGCD_RESERVAS r
+    WHERE  r.ID_RESERVA = V_R1;
+    COMPROBAR(V_ESTADO = 'CONFIRMADA' AND V_IMPORTE = 18000,
+              'crear_reserva de mostrador nace confirmada y cobra una tarifa de dia');
+    COMPROBAR(V_ADMIN_R = V_ADMIN, 'la reserva de mostrador guarda al administrador');
+    SELECT TO_CHAR(r.TERMINO_RESERVA, 'HH24:MI') INTO V_HORA
+    FROM   SGCD_RESERVAS r
+    WHERE  r.ID_RESERVA = V_R1;
+    COMPROBAR(V_HORA = '11:00', 'un bloque termina exactamente una hora despues');
+
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20043, 'rechaza el mismo bloque en la misma cancha');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''09:00'', 2, ''MOSTRADOR'', V); END;',
+        -20043, 'rechaza un solape parcial contra una reserva existente');
+
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '14:00', 2,
+                                    'MOSTRADOR', V_R2);
+    SELECT r.IMPORTE_ACORDADO INTO V_IMPORTE FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R2;
+    COMPROBAR(V_IMPORTE = 36000, 'dos bloques suman dos tarifas: 36.000');
+
+    SGCD_PKG_RESERVAS.crear_solicitud_web(V_CLI, 4, 1, V_MARTES, '12:00', 1, V_R3);
+    SELECT r.ESTADO_RESERVA, r.ID_ADMINISTRADOR INTO V_ESTADO, V_ADMIN_R
+    FROM   SGCD_RESERVAS r
+    WHERE  r.ID_RESERVA = V_R3;
+    COMPROBAR(V_ESTADO = 'PENDIENTE' AND V_ADMIN_R IS NULL,
+              'la solicitud web nace pendiente y sin administrador');
+    COMPROBAR(SGCD_PKG_RESERVAS.disponible(4, 1, V_MARTES, '12:00', 1) = 0
+              AND SGCD_PKG_RESERVAS.disponible(4, 1, V_MARTES, '13:00', 1) = 1,
+              'una solicitud pendiente retiene el bloque y el vecino sigue libre');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''12:00'', 1, ''MOSTRADOR'', V); END;',
+        -20043, 'la solicitud web pendiente bloquea el mostrador');
+
+    SGCD_PKG_RESERVAS.confirmar_reserva(V_R3);
+    SELECT r.ESTADO_RESERVA INTO V_ESTADO FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R3;
+    COMPROBAR(V_ESTADO = 'CONFIRMADA', 'confirmar_reserva pasa la solicitud a confirmada');
+    ESPERAR_ERROR('BEGIN SGCD_PKG_RESERVAS.confirmar_reserva(' || V_R3 || '); END;',
+                  -20046, 'no se confirma dos veces');
+
+    SGCD_PKG_RESERVAS.cancelar_reserva(V_R1);
+    SELECT r.ESTADO_RESERVA INTO V_ESTADO FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R1;
+    COMPROBAR(V_ESTADO = 'CANCELADA', 'cancelar_reserva deja la reserva cancelada');
+    ESPERAR_ERROR('BEGIN SGCD_PKG_RESERVAS.cancelar_reserva(' || V_R1 || '); END;',
+                  -20046, 'no se cancela dos veces');
+
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '10:00', 1,
+                                    'MOSTRADOR', V_R4);
+    COMPROBAR(SGCD_PKG_RESERVAS.disponible(4, 1, V_MARTES, '10:00', 1) = 0,
+              'el bloque cancelado se puede volver a reservar y queda ocupado');
+
+    SGCD_PKG_RESERVAS.reprogramar_reserva(V_R4, V_MARTES, '18:00', 1);
+    SELECT r.IMPORTE_ACORDADO INTO V_IMPORTE FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R4;
+    COMPROBAR(V_IMPORTE = 22000
+              AND SGCD_PKG_RESERVAS.disponible(4, 1, V_MARTES, '10:00', 1) = 1,
+              'reprogramar libera el bloque viejo y recotiza la tarifa de noche');
+
+    INSERT INTO SGCD_PAGOS (ID_RESERVA, IMPORTE_PAGO, MEDIO_PAGO, ESTADO_PAGO)
+    VALUES (V_R4, 18000, 'EFECTIVO', 'PAGADO');
+    SGCD_PKG_RESERVAS.reprogramar_reserva(V_R4, V_MARTES, '16:00', 2);
+    SELECT r.IMPORTE_ACORDADO INTO V_IMPORTE FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R4;
+    COMPROBAR(V_IMPORTE = 36000,
+              'si el nuevo total supera lo pagado, el importe sube y queda diferencia por cobrar');
+    SGCD_PKG_RESERVAS.reprogramar_reserva(V_R4, V_MARTES, '16:00', 1);
+    SELECT r.IMPORTE_ACORDADO INTO V_IMPORTE FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R4;
+    COMPROBAR(V_IMPORTE = 36000,
+              'si el nuevo total baja, se mantiene el importe original sin reembolso');
+
+    SGCD_PKG_RESERVAS.cancelar_reserva(V_R2);
+    ESPERAR_ERROR(
+        'BEGIN SGCD_PKG_RESERVAS.reprogramar_reserva(' || V_R2
+        || ', TRUNC(SYSDATE, ''IW'') + 8, ''11:00'', 1); END;',
+        -20046, 'no se reprograma una reserva cancelada');
+
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 7, 1, V_MARTES, '10:00', 1,
+                                    'MOSTRADOR', V_R5);
+    SELECT r.IMPORTE_ACORDADO INTO V_IMPORTE FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R5;
+    COMPROBAR(V_IMPORTE = 45000, 'la cancha grande cotiza su propia tarifa');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 1, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20043, 'la cancha grande ocupa su componente 1');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 3, 1, TRUNC(SYSDATE, ''IW'') + 8, ''09:00'', 2, ''MOSTRADOR'', V); END;',
+        -20043, 'la cancha grande ocupa su componente 3 en cualquier solape');
+
+    SGCD_PKG_RESERVAS.cancelar_reserva(V_R5);
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 2, 1, V_MARTES, '10:00', 1,
+                                    'MOSTRADOR', V_R6);
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 7, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20043, 'una componente ocupada bloquea la cancha grande');
+    SGCD_PKG_RESERVAS.cancelar_reserva(V_R6);
+
+    UPDATE SGCD_CANCHAS SET ESTADO_CANCHA = 'MANTENCION' WHERE ID_CANCHA = 6;
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 6, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20041, 'no reserva una cancha en mantencion');
+    UPDATE SGCD_CANCHAS SET ESTADO_CANCHA = 'DISPONIBLE' WHERE ID_CANCHA = 6;
+
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 8, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20041, 'rechaza una modalidad que la cancha no admite');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 13, ''20:00'', 1, ''MOSTRADOR'', V); END;',
+        -20042, 'el domingo cierra a las 20:00 y no admite un bloque mas');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 7, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20042, 'el lunes el recinto no abre');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''07:00'', 1, ''MOSTRADOR'', V); END;',
+        -20042, 'rechaza una hora antes de la apertura');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''21:00'', 2, ''MOSTRADOR'', V); END;',
+        -20042, 'rechaza dos bloques que se salen del cierre');
+
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE) - 1, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20044, 'no reserva en una fecha pasada');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE) + 91, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20044, 'no reserva mas alla de 90 dias');
+
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 0, ''MOSTRADOR'', V); END;',
+        -20040, 'rechaza una cantidad de bloques en cero');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, NULL, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20040, 'rechaza una reserva sin fecha');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''TORNEO'', V); END;',
+        -20040, 'el origen TORNEO no se usa en este paquete');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''WEB'', V); END;',
+        -20040, 'una solicitud web no lleva administrador');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_CLI
+        || ', NULL, 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+        -20045, 'el mostrador exige administrador');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_INAC || ', ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''09:00'', 1, ''MOSTRADOR'', V); END;',
+        -20045, 'rechaza un cliente inactivo');
+    ESPERAR_ERROR(
+        'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(NULL, ' || V_ADMIN
+        || ', 4, 1, TRUNC(SYSDATE, ''IW'') + 8, ''09:00'', 1, ''MOSTRADOR'', V); END;',
+        -20045, 'rechaza una reserva sin cliente');
+
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '20:00', 1,
+                                    'MOSTRADOR', V_R7);
+    UPDATE SGCD_RESERVAS
+    SET    INICIO_RESERVA = TRUNC(SYSDATE) - 2,
+           TERMINO_RESERVA = TRUNC(SYSDATE) - 2 + 1 / 24
+    WHERE  ID_RESERVA = V_R7;
+    SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '21:00', 1,
+                                    'MOSTRADOR', V_R8);
+    SGCD_PKG_RESERVAS.cancelar_reserva(V_R8);
+    UPDATE SGCD_RESERVAS
+    SET    INICIO_RESERVA = TRUNC(SYSDATE) - 2,
+           TERMINO_RESERVA = TRUNC(SYSDATE) - 2 + 1 / 24
+    WHERE  ID_RESERVA = V_R8;
+
+    V_CANTIDAD := SGCD_PKG_RESERVAS.marcar_completadas();
+    SELECT r.ESTADO_RESERVA INTO V_ESTADO FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R7;
+    COMPROBAR(V_CANTIDAD >= 1 AND V_ESTADO = 'COMPLETADA',
+              'marcar_completadas cierra la confirmada cuya fecha ya paso');
+    SELECT r.ESTADO_RESERVA INTO V_ESTADO FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R8;
+    COMPROBAR(V_ESTADO = 'CANCELADA', 'marcar_completadas no toca las canceladas');
+END;
+
+    ROLLBACK;
+    DBMS_OUTPUT.PUT_LINE('---');
+    IF V_FALLAS = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: todas las comprobaciones pasaron');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: ' || V_FALLAS || ' fallas');
+    END IF;
+END;
+/
+
+DECLARE
+    V_FALLAS NUMBER := 0;
+
+    PROCEDURE OK (P_TEXTO VARCHAR2) IS
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('OK    ' || P_TEXTO);
+    END;
+
+    PROCEDURE FALLA (P_TEXTO VARCHAR2) IS
+    BEGIN
+        V_FALLAS := V_FALLAS + 1;
+        DBMS_OUTPUT.PUT_LINE('FALLA ' || P_TEXTO);
+    END;
+
+    PROCEDURE COMPROBAR (P_CONDICION BOOLEAN, P_TEXTO VARCHAR2) IS
+    BEGIN
+        IF P_CONDICION THEN OK(P_TEXTO); ELSE FALLA(P_TEXTO); END IF;
+    END;
+
+    PROCEDURE ESPERAR_ERROR (P_BLOQUE VARCHAR2, P_CODIGO NUMBER, P_NOMBRE VARCHAR2) IS
+    BEGIN
+        EXECUTE IMMEDIATE P_BLOQUE;
+        FALLA(P_NOMBRE || ' (se acepto y debia rechazarse)');
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = P_CODIGO THEN
+                OK(P_NOMBRE);
+            ELSE
+                FALLA(P_NOMBRE || ' (ORA-' || SQLCODE || ', se esperaba ORA-' || P_CODIGO || ')');
+            END IF;
+    END;
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('--- UNIDAD 8: SGCD_PKG_PAGOS');
+
+    DECLARE
+        V_CLI        NUMBER;
+        V_CREADA     BOOLEAN;
+        V_ADMIN      NUMBER;
+        V_USR_INAC   NUMBER;
+        V_ADMIN_INAC NUMBER;
+        V_R1         NUMBER;
+        V_R2         NUMBER;
+        V_R3         NUMBER;
+        V_R4         NUMBER;
+        V_R5         NUMBER;
+        V_R6         NUMBER;
+        V_ID1        NUMBER;
+        V_ID2        NUMBER;
+        V_ESTADO     VARCHAR2(15);
+        V_MEDIO      VARCHAR2(20);
+        V_IMPORTE    NUMBER(12,2);
+        V_FECHA      DATE;
+        V_CANTIDAD   NUMBER;
+        C            SYS_REFCURSOR;
+        F_ID_PAGO    NUMBER;
+        F_ID_RES     NUMBER;
+        F_IMPORTE    NUMBER(12,2);
+        F_FECHA      DATE;
+        F_MEDIO      VARCHAR2(20);
+        F_ESTADO     VARCHAR2(15);
+        F_ACORDADO   NUMBER(12,2);
+        F_SALDO      NUMBER(12,2);
+        V_MARTES     DATE := TRUNC(SYSDATE, 'IW') + 8;
+    BEGIN
+        SGCD_PKG_CLIENTES.crear_ficha(33000001, '5', 'Cliente Pagos', NULL, NULL,
+                                      V_CLI, V_CREADA);
+        SELECT MIN(a.ID_ADMINISTRADOR) INTO V_ADMIN
+        FROM   SGCD_ADMINISTRADORES a
+        WHERE  a.ESTADO_ADMINISTRADOR = 'ACTIVO';
+        SGCD_PKG_AUTH.crear_usuario('cta_pago_inactivo', RPAD('x', 60, 'x'),
+                                    'ADMINISTRADOR', V_USR_INAC);
+        SGCD_CREAR_ADMINISTRADOR(V_USR_INAC, 'Admin Inactivo Pagos', 'INACTIVO', V_ADMIN_INAC);
+
+        SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '10:00', 1,
+                                        'MOSTRADOR', V_R1);
+        SGCD_PKG_RESERVAS.crear_solicitud_web(V_CLI, 4, 1, V_MARTES, '12:00', 1, V_R2);
+        SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '11:00', 1,
+                                        'MOSTRADOR', V_R3);
+        SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '13:00', 1,
+                                        'MOSTRADOR', V_R4);
+        SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '14:00', 1,
+                                        'MOSTRADOR', V_R5);
+        SGCD_PKG_RESERVAS.crear_reserva(V_CLI, V_ADMIN, 4, 1, V_MARTES, '15:00', 1,
+                                        'MOSTRADOR', V_R6);
+
+        COMPROBAR(SGCD_PKG_PAGOS.saldo_reserva(V_R1) = 18000,
+                  'una reserva sin pagar debe el importe completo');
+
+        SGCD_PKG_PAGOS.registrar_pago(V_R1, 'efectivo', V_ADMIN);
+        SELECT p.ID_PAGO, p.IMPORTE_PAGO, p.MEDIO_PAGO, p.ESTADO_PAGO, p.FECHA_PAGO
+        INTO   V_ID1, V_IMPORTE, V_MEDIO, V_ESTADO, V_FECHA
+        FROM   SGCD_PAGOS p
+        WHERE  p.ID_RESERVA = V_R1;
+        COMPROBAR(V_ESTADO = 'PAGADO' AND V_IMPORTE = 18000 AND V_MEDIO = 'EFECTIVO',
+                  'registrar_pago deja el pago vigente por el total y normaliza el medio');
+        COMPROBAR(TO_CHAR(V_FECHA, 'YYYY-MM-DD') = TO_CHAR(SYSDATE, 'YYYY-MM-DD'),
+                  'la fecha del pago es la del dia');
+        COMPROBAR(SGCD_PKG_PAGOS.saldo_reserva(V_R1) = 0,
+                  'con el pago registrado el saldo queda en cero');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(' || V_R1 || ', ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20053, 'no se registra dos veces el mismo pago');
+
+        C := SGCD_PKG_PAGOS.pago_de_reserva(V_R1);
+        FETCH C INTO F_ID_PAGO, F_ID_RES, F_IMPORTE, F_FECHA, F_MEDIO, F_ESTADO,
+                    F_ACORDADO, F_SALDO;
+        COMPROBAR(F_ID_PAGO = V_ID1 AND F_ESTADO = 'PAGADO' AND F_ACORDADO = 18000
+                  AND F_SALDO = 0,
+                  'pago_de_reserva devuelve el pago con su saldo');
+        CLOSE C;
+
+        SGCD_PKG_PAGOS.anular_pago(V_R1, V_ADMIN);
+        SELECT p.ESTADO_PAGO INTO V_ESTADO FROM SGCD_PAGOS p WHERE p.ID_RESERVA = V_R1;
+        COMPROBAR(V_ESTADO = 'ANULADO' AND SGCD_PKG_PAGOS.saldo_reserva(V_R1) = 18000,
+                  'anular deja la fila y vuelve a deber el importe');
+        ESPERAR_ERROR('BEGIN SGCD_PKG_PAGOS.anular_pago(' || V_R1 || ', ' || V_ADMIN || '); END;',
+                      -20055, 'no se anula dos veces');
+
+        SGCD_PKG_PAGOS.registrar_pago(V_R1, 'DEBITO', V_ADMIN);
+        SELECT p.ID_PAGO, p.ESTADO_PAGO, p.MEDIO_PAGO
+        INTO   V_ID2, V_ESTADO, V_MEDIO
+        FROM   SGCD_PAGOS p
+        WHERE  p.ID_RESERVA = V_R1;
+        COMPROBAR(V_ID2 = V_ID1 AND V_ESTADO = 'PAGADO' AND V_MEDIO = 'DEBITO',
+                  'recobrar reutiliza la misma fila del pago anulado');
+
+        SGCD_PKG_RESERVAS.cancelar_reserva(V_R1);
+        SGCD_PKG_PAGOS.anular_pago(V_R1, V_ADMIN);
+        SELECT p.ESTADO_PAGO INTO V_ESTADO FROM SGCD_PAGOS p WHERE p.ID_RESERVA = V_R1;
+        COMPROBAR(V_ESTADO = 'ANULADO',
+                  'anular un pago de una reserva cancelada es el reembolso');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(' || V_R1 || ', ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20052, 'una reserva cancelada no se cobra');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(' || V_R2 || ', ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20052, 'una solicitud web pendiente no se cobra');
+
+        SGCD_PKG_RESERVAS.cancelar_reserva(V_R3);
+        ESPERAR_ERROR('BEGIN SGCD_PKG_PAGOS.anular_pago(' || V_R3 || ', ' || V_ADMIN || '); END;',
+                      -20054, 'anular exige un pago existente');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.cobrar_diferencia(' || V_R6 || ', ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20054, 'la diferencia exige un pago vigente');
+
+        UPDATE SGCD_RESERVAS
+        SET    INICIO_RESERVA = TRUNC(SYSDATE) - 2,
+               TERMINO_RESERVA = TRUNC(SYSDATE) - 2 + 1 / 24
+        WHERE  ID_RESERVA = V_R4;
+        V_CANTIDAD := SGCD_PKG_RESERVAS.marcar_completadas();
+        SELECT r.ESTADO_RESERVA INTO V_ESTADO FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R4;
+        COMPROBAR(V_ESTADO = 'COMPLETADA' AND V_CANTIDAD >= 1,
+                  'la reserva de prueba queda completada');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(' || V_R4 || ', ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20052, 'una reserva completada no se cobra: el pago es por adelantado');
+
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(' || V_R5 || ', ''CHEQUE'', ' || V_ADMIN || '); END;',
+            -20050, 'rechaza un medio de pago fuera del catalogo');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(999999, ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20051, 'rechaza una reserva inexistente');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(' || V_R5 || ', ''EFECTIVO'', ' || V_ADMIN_INAC || '); END;',
+            -20057, 'rechaza un administrador inactivo');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.registrar_pago(NULL, ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20050, 'rechaza una reserva nula');
+
+        SGCD_PKG_PAGOS.registrar_pago(V_R5, 'EFECTIVO', V_ADMIN);
+        SGCD_PKG_RESERVAS.reprogramar_reserva(V_R5, V_MARTES, '18:00', 1);
+        SGCD_PKG_PAGOS.cobrar_diferencia(V_R5, 'CREDITO', V_ADMIN);
+        SELECT p.IMPORTE_PAGO, p.MEDIO_PAGO INTO V_IMPORTE, V_MEDIO
+        FROM   SGCD_PAGOS p WHERE p.ID_RESERVA = V_R5;
+        COMPROBAR(V_IMPORTE = 22000 AND V_MEDIO = 'CREDITO'
+                  AND SGCD_PKG_PAGOS.saldo_reserva(V_R5) = 0,
+                  'cobrar_diferencia sube el pago a la tarifa de noche');
+
+        SGCD_PKG_RESERVAS.reprogramar_reserva(V_R5, V_MARTES, '19:00', 2);
+        COMPROBAR(SGCD_PKG_PAGOS.saldo_reserva(V_R5) = 22000,
+                  'tras reprogramar a dos bloques queda la diferencia por cobrar');
+        SGCD_PKG_PAGOS.cobrar_diferencia(V_R5, 'TRANSFERENCIA', V_ADMIN);
+        SELECT p.IMPORTE_PAGO INTO V_IMPORTE FROM SGCD_PAGOS p WHERE p.ID_RESERVA = V_R5;
+        COMPROBAR(V_IMPORTE = 44000 AND SGCD_PKG_PAGOS.saldo_reserva(V_R5) = 0,
+                  'cobrar_diferencia cubre el total de dos bloques');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_PAGOS.cobrar_diferencia(' || V_R5 || ', ''EFECTIVO'', ' || V_ADMIN || '); END;',
+            -20056, 'no se cobra una diferencia cuando el saldo es cero');
+    END;
+
+    ROLLBACK;
+    DBMS_OUTPUT.PUT_LINE('---');
+    IF V_FALLAS = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: todas las comprobaciones pasaron');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: ' || V_FALLAS || ' fallas');
+    END IF;
+END;
+/
+
+DECLARE
+    V_FALLAS NUMBER := 0;
+
+    PROCEDURE OK (P_TEXTO VARCHAR2) IS
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('OK    ' || P_TEXTO);
+    END;
+
+    PROCEDURE FALLA (P_TEXTO VARCHAR2) IS
+    BEGIN
+        V_FALLAS := V_FALLAS + 1;
+        DBMS_OUTPUT.PUT_LINE('FALLA ' || P_TEXTO);
+    END;
+
+    PROCEDURE COMPROBAR (P_CONDICION BOOLEAN, P_TEXTO VARCHAR2) IS
+    BEGIN
+        IF P_CONDICION THEN OK(P_TEXTO); ELSE FALLA(P_TEXTO); END IF;
+    END;
+
+    PROCEDURE ESPERAR_ERROR (P_BLOQUE VARCHAR2, P_CODIGO NUMBER, P_NOMBRE VARCHAR2) IS
+    BEGIN
+        EXECUTE IMMEDIATE P_BLOQUE;
+        FALLA(P_NOMBRE || ' (se acepto y debia rechazarse)');
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = P_CODIGO THEN
+                OK(P_NOMBRE);
+            ELSE
+                FALLA(P_NOMBRE || ' (ORA-' || SQLCODE || ', se esperaba ORA-' || P_CODIGO || ')');
+            END IF;
+    END;
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('--- UNIDAD 9: SGCD_PKG_TORNEOS');
+
+    DECLARE
+        V_C1        NUMBER;
+        V_C2        NUMBER;
+        V_C3        NUMBER;
+        V_CREADA    BOOLEAN;
+        V_ADMIN     NUMBER;
+        V_T1        NUMBER;
+        V_T2        NUMBER;
+        V_T3        NUMBER;
+        V_I1        NUMBER;
+        V_I2        NUMBER;
+        V_I3        NUMBER;
+        V_I4        NUMBER;
+        V_MAX_MOD   NUMBER;
+        V_MAX_TORN  NUMBER;
+        V_ESTADO    VARCHAR2(15);
+        V_CANTIDAD  NUMBER;
+        V_CUENTA    NUMBER;
+        V_RUT_J     NUMBER;
+        V_CLIENTE_J NUMBER;
+        V_ID_CLIENTE NUMBER;
+        V_ID_TORNEO NUMBER;
+        V_ORIGEN    VARCHAR2(15);
+        V_ESTADO_RES VARCHAR2(15);
+        V_IMPORTE   NUMBER(12,2);
+        V_MARTES    DATE := TRUNC(SYSDATE, 'IW') + 8;
+    BEGIN
+        SGCD_PKG_CLIENTES.crear_ficha(34000001, '3', 'Capitan Uno', NULL, NULL, V_C1, V_CREADA);
+        SGCD_PKG_CLIENTES.crear_ficha(34000002, '1', 'Capitan Dos', NULL, NULL, V_C2, V_CREADA);
+        SGCD_PKG_CLIENTES.crear_ficha(34000003, 'K', 'Capitan Tres', NULL, NULL, V_C3, V_CREADA);
+        SELECT MIN(a.ID_ADMINISTRADOR) INTO V_ADMIN
+        FROM   SGCD_ADMINISTRADORES a
+        WHERE  a.ESTADO_ADMINISTRADOR = 'ACTIVO';
+
+        SGCD_PKG_TORNEOS.crear_torneo(1, 'Copa Futbol', V_MARTES, V_MARTES + 7, 2,
+                                      NULL, V_T1);
+        SELECT t.ESTADO_TORNEO, t.MAX_JUGADORES_POR_EQUIPO
+        INTO   V_ESTADO, V_MAX_TORN
+        FROM   SGCD_TORNEOS t WHERE t.ID_TORNEO = V_T1;
+        SELECT m.MAX_JUGADORES_POR_EQUIPO INTO V_MAX_MOD
+        FROM   SGCD_MODALIDADES m WHERE m.ID_MODALIDAD = 1;
+        COMPROBAR(V_ESTADO = 'PLANIFICADO' AND V_MAX_TORN = V_MAX_MOD,
+                  'crear_torneo nace planificado y copia el maximo de la modalidad');
+
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.crear_torneo(1, ''Mal Fechado'', TRUNC(SYSDATE) + 10, TRUNC(SYSDATE) + 5, 2, NULL, V); END;',
+            -20060, 'rechaza un termino anterior al inicio');
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.crear_torneo(1, ''Sin Cupos'', TRUNC(SYSDATE) + 5, TRUNC(SYSDATE) + 10, 0, NULL, V); END;',
+            -20060, 'rechaza cero cupos');
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.crear_torneo(99, ''Sin Modalidad'', TRUNC(SYSDATE) + 5, TRUNC(SYSDATE) + 10, 2, NULL, V); END;',
+            -20060, 'rechaza una modalidad inexistente');
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.crear_torneo(1, ''Pasado'', TRUNC(SYSDATE) - 5, TRUNC(SYSDATE) + 5, 2, NULL, V); END;',
+            -20060, 'rechaza un torneo que empieza en el pasado');
+
+        SGCD_PKG_TORNEOS.inscribir_equipo(V_T1, V_C1, 'Los Uno', V_I1);
+        SELECT i.ESTADO_INSCRIPCION, i.CANTIDAD_JUGADORES INTO V_ESTADO, V_CANTIDAD
+        FROM   SGCD_INSCRIPCIONES_TORNEO i WHERE i.ID_INSCRIPCION = V_I1;
+        COMPROBAR(V_ESTADO = 'INSCRITO' AND V_CANTIDAD = 1,
+                  'inscribir_equipo crea el equipo con el capitan como primer jugador');
+        SELECT j.RUT_JUGADOR, j.ID_CLIENTE INTO V_RUT_J, V_CLIENTE_J
+        FROM   SGCD_EQUIPOS_JUGADORES ej
+        JOIN   SGCD_JUGADORES j ON j.ID_JUGADOR = ej.ID_JUGADOR
+        WHERE  ej.ID_INSCRIPCION = V_I1;
+        COMPROBAR(V_RUT_J = 34000001 AND V_CLIENTE_J = V_C1,
+                  'el capitan queda vinculado a su ficha de cliente');
+
+        SGCD_PKG_TORNEOS.agregar_jugador(V_I1, 35000001, '1', 'Jugador Uno');
+        SGCD_PKG_TORNEOS.agregar_jugador(V_I1, 35000002, 'K', 'Jugador Dos');
+        SELECT i.CANTIDAD_JUGADORES INTO V_CANTIDAD
+        FROM   SGCD_INSCRIPCIONES_TORNEO i WHERE i.ID_INSCRIPCION = V_I1;
+        COMPROBAR(V_CANTIDAD = 3, 'agregar_jugador recalcula la plantilla a tres');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.agregar_jugador(' || V_I1 || ', 35000001, ''1'', ''Repetido''); END;',
+            -20065, 'rechaza un jugador repetido en el mismo equipo');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.agregar_jugador(' || V_I1 || ', 35000003, ''8'', ''  ''); END;',
+            -20060, 'rechaza un jugador sin nombre');
+
+        SGCD_PKG_TORNEOS.inscribir_equipo(V_T1, V_C2, 'Los Dos', V_I2);
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.agregar_jugador(' || V_I2 || ', 35000001, ''1'', ''Jugador Uno''); END;',
+            -20066, 'rechaza un jugador ya inscrito en otro equipo del torneo');
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.inscribir_equipo(' || V_T1 || ', ' || V_C3 || ', ''Los Tres'', V); END;',
+            -20063, 'rechaza la inscripcion cuando no quedan cupos');
+
+        SGCD_PKG_TORNEOS.retirar_equipo(V_I1);
+        SELECT i.ESTADO_INSCRIPCION INTO V_ESTADO
+        FROM   SGCD_INSCRIPCIONES_TORNEO i WHERE i.ID_INSCRIPCION = V_I1;
+        COMPROBAR(V_ESTADO = 'RETIRADO', 'retirar_equipo deja la inscripcion retirada');
+        SGCD_PKG_TORNEOS.retirar_equipo(V_I1);
+        OK('retirar dos veces no falla');
+        SGCD_PKG_TORNEOS.inscribir_equipo(V_T1, V_C3, 'Los Tres', V_I3);
+        SELECT i.ESTADO_INSCRIPCION INTO V_ESTADO
+        FROM   SGCD_INSCRIPCIONES_TORNEO i WHERE i.ID_INSCRIPCION = V_I3;
+        COMPROBAR(V_ESTADO = 'INSCRITO', 'el retiro libera el cupo para otro equipo');
+        SGCD_PKG_TORNEOS.agregar_jugador(V_I3, 35000001, '1', 'Jugador Uno');
+        SELECT i.CANTIDAD_JUGADORES INTO V_CANTIDAD
+        FROM   SGCD_INSCRIPCIONES_TORNEO i WHERE i.ID_INSCRIPCION = V_I3;
+        COMPROBAR(V_CANTIDAD = 2,
+                  'el retiro libera los RUT del equipo retirado en ese torneo');
+
+        SGCD_PKG_TORNEOS.crear_torneo(2, 'Copa Padel', V_MARTES, V_MARTES + 3, 1, NULL, V_T2);
+        SGCD_PKG_TORNEOS.inscribir_equipo(V_T2, V_C1, 'Padel Uno', V_I4);
+        SELECT t.MAX_JUGADORES_POR_EQUIPO INTO V_MAX_TORN
+        FROM   SGCD_TORNEOS t WHERE t.ID_TORNEO = V_T2;
+        COMPROBAR(V_MAX_TORN = 2, 'padel copia su maximo de dos jugadores');
+        SGCD_PKG_TORNEOS.agregar_jugador(V_I4, 35000002, 'K', 'Jugador Dos');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.agregar_jugador(' || V_I4 || ', 35000003, ''8'', ''Jugador Tres''); END;',
+            -20064, 'rechaza un jugador que supera el maximo del torneo');
+        UPDATE SGCD_TORNEOS SET ESTADO_TORNEO = 'EN_CURSO' WHERE ID_TORNEO = V_T2;
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.agregar_jugador(' || V_I4 || ', 35000003, ''8'', ''Jugador Tres''); END;',
+            -20062, 'un torneo en curso no admite cambios de plantilla');
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.inscribir_equipo(' || V_T2 || ', ' || V_C3 || ', ''Padel Dos'', V); END;',
+            -20062, 'un torneo en curso no admite inscripciones');
+
+        SGCD_PKG_TORNEOS.crear_torneo(1, 'Copa Maximo', V_MARTES, V_MARTES + 5, 3, 2, V_T3);
+        SGCD_PKG_TORNEOS.inscribir_equipo(V_T3, V_C2, 'Maximo Uno', V_I1);
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_TORNEOS.inscribir_equipo(' || V_T3 || ', ' || V_C3 || ', ''Maximo Uno'', V); END;',
+            -20069, 'rechaza un nombre de equipo repetido en el torneo');
+        SGCD_PKG_TORNEOS.agregar_jugador(V_I1, 35000003, '8', 'Jugador Tres');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.ajustar_maximo(' || V_T3 || ', 1); END;',
+            -20064, 'no baja el maximo por debajo de la plantilla activa');
+        SGCD_PKG_TORNEOS.ajustar_maximo(V_T3, 3);
+        SELECT t.MAX_JUGADORES_POR_EQUIPO INTO V_MAX_TORN
+        FROM   SGCD_TORNEOS t WHERE t.ID_TORNEO = V_T3;
+        COMPROBAR(V_MAX_TORN = 3, 'ajustar_maximo sube el tope del torneo');
+
+        SGCD_PKG_TORNEOS.programar_torneo(V_T1, 5, V_MARTES, '10:00', '12:00');
+        SELECT COUNT(*), MIN(r.ID_CLIENTE), MIN(r.ID_TORNEO), MIN(r.ORIGEN_RESERVA),
+               MIN(r.ESTADO_RESERVA), SUM(r.IMPORTE_ACORDADO)
+        INTO   V_CUENTA, V_ID_CLIENTE, V_ID_TORNEO, V_ORIGEN, V_ESTADO_RES, V_IMPORTE
+        FROM   SGCD_RESERVAS r
+        WHERE  r.ID_TORNEO = V_T1;
+        COMPROBAR(V_CUENTA = 2 AND V_ID_CLIENTE IS NULL AND V_ID_TORNEO = V_T1
+                  AND V_ORIGEN = 'TORNEO' AND V_ESTADO_RES = 'CONFIRMADA'
+                  AND V_IMPORTE = 36000,
+                  'programar_torneo crea un bloque por hora, sin cliente y con tarifa');
+        COMPROBAR(SGCD_PKG_RESERVAS.disponible(5, 1, V_MARTES, '10:00', 1) = 0,
+                  'el bloque del torneo ocupa el calendario');
+        ESPERAR_ERROR(
+            'DECLARE V NUMBER; BEGIN SGCD_PKG_RESERVAS.crear_reserva(' || V_C1 || ', ' || V_ADMIN
+            || ', 5, 1, TRUNC(SYSDATE, ''IW'') + 8, ''10:00'', 1, ''MOSTRADOR'', V); END;',
+            -20043, 'el bloque del torneo le gana el horario al mostrador');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.programar_torneo(' || V_T1 || ', 5, TRUNC(SYSDATE, ''IW'') + 8, ''11:00'', ''13:00''); END;',
+            -20043, 'no programa encima de un bloque ya tomado');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.programar_torneo(' || V_T1 || ', 5, TRUNC(SYSDATE, ''IW'') + 8, ''09:00'', ''11:00''); END;',
+            -20043, 'no programa si un bloque intermedio choca');
+        SELECT COUNT(*) INTO V_CUENTA
+        FROM   SGCD_RESERVAS r
+        WHERE  r.ID_TORNEO = V_T1 AND r.ID_CANCHA = 5
+          AND  r.INICIO_RESERVA = TRUNC(SYSDATE, 'IW') + 8 + 9 / 24;
+        COMPROBAR(V_CUENTA = 0,
+                  'un fallo a mitad de rango no deja el bloque anterior programado');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.programar_torneo(' || V_T1 || ', 5, TRUNC(SYSDATE, ''IW'') + 8, ''10:30'', ''12:30''); END;',
+            -20070, 'rechaza un rango que no calza con bloques de una hora');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.programar_torneo(' || V_T1 || ', 5, TRUNC(SYSDATE, ''IW'') + 7, ''10:00'', ''11:00''); END;',
+            -20042, 'el lunes el recinto no abre, tampoco para torneos');
+        ESPERAR_ERROR(
+            'BEGIN SGCD_PKG_TORNEOS.programar_torneo(' || V_T1 || ', 5, TRUNC(SYSDATE, ''IW'') + 8, ''21:00'', ''23:00''); END;',
+            -20042, 'un torneo tampoco se sale del cierre');
+
+        SGCD_PKG_TORNEOS.programar_torneo(V_T2, 8, V_MARTES, '13:00', '14:00');
+        SELECT COUNT(*) INTO V_CUENTA FROM SGCD_RESERVAS r WHERE r.ID_TORNEO = V_T2;
+        COMPROBAR(V_CUENTA = 1, 'un torneo en curso si admite programacion');
+    END;
+
+    ROLLBACK;
+    DBMS_OUTPUT.PUT_LINE('---');
+    IF V_FALLAS = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: todas las comprobaciones pasaron');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: ' || V_FALLAS || ' fallas');
+    END IF;
+END;
+/
+
+DECLARE
+    V_FALLAS NUMBER := 0;
+
+    PROCEDURE OK (P_TEXTO VARCHAR2) IS
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('OK    ' || P_TEXTO);
+    END;
+
+    PROCEDURE FALLA (P_TEXTO VARCHAR2) IS
+    BEGIN
+        V_FALLAS := V_FALLAS + 1;
+        DBMS_OUTPUT.PUT_LINE('FALLA ' || P_TEXTO);
+    END;
+
+    PROCEDURE COMPROBAR (P_CONDICION BOOLEAN, P_TEXTO VARCHAR2) IS
+    BEGIN
+        IF P_CONDICION THEN OK(P_TEXTO); ELSE FALLA(P_TEXTO); END IF;
+    END;
+
+    PROCEDURE ESPERAR_ERROR (P_BLOQUE VARCHAR2, P_CODIGO NUMBER, P_NOMBRE VARCHAR2) IS
+    BEGIN
+        EXECUTE IMMEDIATE P_BLOQUE;
+        FALLA(P_NOMBRE || ' (se acepto y debia rechazarse)');
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = P_CODIGO THEN
+                OK(P_NOMBRE);
+            ELSE
+                FALLA(P_NOMBRE || ' (ORA-' || SQLCODE || ', se esperaba ORA-' || P_CODIGO || ')');
+            END IF;
+    END;
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('--- UNIDAD 10: SGCD_PKG_CONSULTAS');
+
+    DECLARE
+        V_A         NUMBER;
+        V_B         NUMBER;
+        V_CREADA    BOOLEAN;
+        V_ADMIN     NUMBER;
+        V_TORNEO    NUMBER;
+        V_R1        NUMBER;
+        V_R2        NUMBER;
+        V_R3        NUMBER;
+        V_R4        NUMBER;
+        V_MARTES    DATE := TRUNC(SYSDATE, 'IW') + 8;
+        V_FILAS     NUMBER;
+        V_RESERVAS  NUMBER;
+        V_HORAS     NUMBER;
+        V_IMPORTE   NUMBER;
+        V_DIA       DATE;
+        V_PAGOS     NUMBER;
+        V_TOTAL     NUMBER;
+        V_CANCHA    VARCHAR2(100);
+        V_MODALIDAD VARCHAR2(100);
+        V_CLIENTE   VARCHAR2(100);
+        V_RUT       VARCHAR2(20);
+        V_ID        NUMBER;
+        V_SUMA_RES  NUMBER;
+        V_SUMA_HOR  NUMBER;
+        V_SUMA_IMP  NUMBER;
+        C           SYS_REFCURSOR;
+    BEGIN
+        SGCD_PKG_CLIENTES.crear_ficha(36000001, 'K', 'Cliente Reporte A', NULL, NULL,
+                                      V_A, V_CREADA);
+        SGCD_PKG_CLIENTES.crear_ficha(36000002, '8', 'Cliente Reporte B', NULL, NULL,
+                                      V_B, V_CREADA);
+        SELECT MIN(a.ID_ADMINISTRADOR) INTO V_ADMIN
+        FROM   SGCD_ADMINISTRADORES a
+        WHERE  a.ESTADO_ADMINISTRADOR = 'ACTIVO';
+
+        SGCD_PKG_RESERVAS.crear_reserva(V_A, V_ADMIN, 4, 1, V_MARTES, '10:00', 1,
+                                        'MOSTRADOR', V_R1);
+        SGCD_PKG_RESERVAS.crear_reserva(V_A, V_ADMIN, 5, 1, V_MARTES, '18:00', 1,
+                                        'MOSTRADOR', V_R2);
+        SGCD_PKG_RESERVAS.crear_reserva(V_A, V_ADMIN, 4, 1, V_MARTES, '12:00', 1,
+                                        'MOSTRADOR', V_R3);
+        SGCD_PKG_RESERVAS.cancelar_reserva(V_R3);
+        SGCD_PKG_RESERVAS.crear_reserva(V_B, V_ADMIN, 8, 2, V_MARTES, '13:00', 1,
+                                        'MOSTRADOR', V_R4);
+        SGCD_PKG_TORNEOS.crear_torneo(1, 'Copa Reporte', V_MARTES, V_MARTES + 3, 4,
+                                      NULL, V_TORNEO);
+        SGCD_PKG_TORNEOS.programar_torneo(V_TORNEO, 6, V_MARTES, '15:00', '16:00');
+
+        SGCD_PKG_PAGOS.registrar_pago(V_R1, 'EFECTIVO', V_ADMIN);
+        SGCD_PKG_PAGOS.registrar_pago(V_R4, 'DEBITO', V_ADMIN);
+
+        C := NULL;
+        SGCD_PKG_CONSULTAS.ingresos(TRUNC(SYSDATE), TRUNC(SYSDATE), C);
+        FETCH C INTO V_DIA, V_PAGOS, V_TOTAL;
+        COMPROBAR(V_PAGOS = 2 AND V_TOTAL = 34000 AND TRUNC(V_DIA) = TRUNC(SYSDATE),
+                  'ingresos suma solo los pagos vigentes del dia');
+        FETCH C INTO V_DIA, V_PAGOS, V_TOTAL;
+        COMPROBAR(C%NOTFOUND, 'ingresos devuelve una fila por dia con movimiento');
+        CLOSE C;
+
+        SGCD_PKG_CONSULTAS.ingresos(TRUNC(SYSDATE) - 10, TRUNC(SYSDATE) - 10, C);
+        FETCH C INTO V_DIA, V_PAGOS, V_TOTAL;
+        COMPROBAR(C%NOTFOUND, 'ingresos sin movimientos devuelve el cursor vacio');
+        CLOSE C;
+
+        ESPERAR_ERROR(
+            'DECLARE C SYS_REFCURSOR; BEGIN SGCD_PKG_CONSULTAS.ingresos(TRUNC(SYSDATE) + 5, TRUNC(SYSDATE) + 1, C); END;',
+            -20080, 'rechaza un rango invertido');
+        ESPERAR_ERROR(
+            'DECLARE C SYS_REFCURSOR; BEGIN SGCD_PKG_CONSULTAS.ingresos(NULL, TRUNC(SYSDATE), C); END;',
+            -20080, 'rechaza un rango sin fecha desde');
+        ESPERAR_ERROR(
+            'DECLARE C SYS_REFCURSOR; BEGIN SGCD_PKG_CONSULTAS.ingresos(TRUNC(SYSDATE), TRUNC(SYSDATE) + 400, C); END;',
+            -20080, 'rechaza un rango de mas de 366 dias');
+
+        V_FILAS := 0;
+        V_SUMA_RES := 0;
+        V_SUMA_HOR := 0;
+        V_SUMA_IMP := 0;
+        SGCD_PKG_CONSULTAS.reservas_por_cancha(V_MARTES, V_MARTES, NULL, C);
+        LOOP
+            FETCH C INTO V_CANCHA, V_MODALIDAD, V_RESERVAS, V_HORAS, V_IMPORTE;
+            EXIT WHEN C%NOTFOUND;
+            V_FILAS := V_FILAS + 1;
+            V_SUMA_RES := V_SUMA_RES + V_RESERVAS;
+            V_SUMA_HOR := V_SUMA_HOR + V_HORAS;
+            V_SUMA_IMP := V_SUMA_IMP + V_IMPORTE;
+        END LOOP;
+        CLOSE C;
+        COMPROBAR(V_FILAS = 4 AND V_SUMA_RES = 4 AND V_SUMA_IMP = 74000,
+                  'reservas por cancha cuenta las cuatro reservas vigentes y la del torneo');
+        COMPROBAR(V_SUMA_HOR = 4, 'las horas suman un bloque por reserva');
+
+        V_FILAS := 0;
+        V_SUMA_RES := 0;
+        V_SUMA_IMP := 0;
+        SGCD_PKG_CONSULTAS.reservas_por_cancha(V_MARTES, V_MARTES, V_A, C);
+        LOOP
+            FETCH C INTO V_CANCHA, V_MODALIDAD, V_RESERVAS, V_HORAS, V_IMPORTE;
+            EXIT WHEN C%NOTFOUND;
+            V_FILAS := V_FILAS + 1;
+            V_SUMA_RES := V_SUMA_RES + V_RESERVAS;
+            V_SUMA_IMP := V_SUMA_IMP + V_IMPORTE;
+        END LOOP;
+        CLOSE C;
+        COMPROBAR(V_FILAS = 2 AND V_SUMA_RES = 2 AND V_SUMA_IMP = 40000,
+                  'el filtro de propiedad deja solo las reservas del cliente y excluye la cancelada');
+
+        SGCD_PKG_CONSULTAS.clientes_por_reservas(V_MARTES, V_MARTES, NULL, C);
+        FETCH C INTO V_ID, V_CLIENTE, V_RUT, V_RESERVAS, V_HORAS, V_IMPORTE;
+        COMPROBAR(V_ID = V_A AND V_RESERVAS = 2 AND V_IMPORTE = 40000,
+                  'clientes por reservas ordena primero al cliente con mas reservas');
+        COMPROBAR(V_RUT = '36000001-K', 'el reporte muestra el RUT completo con digito');
+        FETCH C INTO V_ID, V_CLIENTE, V_RUT, V_RESERVAS, V_HORAS, V_IMPORTE;
+        COMPROBAR(V_ID = V_B AND V_RESERVAS = 1 AND V_IMPORTE = 16000,
+                  'el segundo cliente trae su propia cuenta');
+        FETCH C INTO V_ID, V_CLIENTE, V_RUT, V_RESERVAS, V_HORAS, V_IMPORTE;
+        COMPROBAR(C%NOTFOUND,
+                  'el bloque de torneo no entra en el reporte de clientes');
+        CLOSE C;
+
+        SGCD_PKG_CONSULTAS.clientes_por_reservas(V_MARTES, V_MARTES, V_B, C);
+        FETCH C INTO V_ID, V_CLIENTE, V_RUT, V_RESERVAS, V_HORAS, V_IMPORTE;
+        COMPROBAR(V_ID = V_B AND V_RESERVAS = 1,
+                  'el filtro de propiedad funciona en el ranking de clientes');
+        FETCH C INTO V_ID, V_CLIENTE, V_RUT, V_RESERVAS, V_HORAS, V_IMPORTE;
+        COMPROBAR(C%NOTFOUND, 'el filtro devuelve una sola fila');
+        CLOSE C;
+    END;
+
+    ROLLBACK;
+    DBMS_OUTPUT.PUT_LINE('---');
+    IF V_FALLAS = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: todas las comprobaciones pasaron');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: ' || V_FALLAS || ' fallas');
+    END IF;
+END;
+/

@@ -565,3 +565,206 @@ y `14_pruebas_paquetes_sgcd_19.sql` con **122 comprobaciones en verde** en las s
 
 **Siguiente.** Unidad 7: `SGCD_PKG_RESERVAS` con bloques consecutivos, candado ordenado del grupo
 grande/1-2-3, cotización desde `SGCD_PKG_TARIFAS` y `reprogramar_reserva`.
+
+---
+
+## 2026-11-24 — Fase 3, unidad 7: `SGCD_PKG_RESERVAS`
+
+**Contexto.** Sobre las 19 tablas y las seis unidades anteriores, se cierra el paquete de reservas:
+bloques consecutivos de una hora, exclusión mutua entre la cancha grande y sus componentes 1-2-3,
+solicitud web que nace pendiente, cancelación, reprogramación con arrastre de pago y cierre de
+reservas vencidas. Protocolo `/calmadito`: contrato declarado antes de escribir y revisión de las
+cuatro lentes al terminar. Ninguna tabla del UML se modificó.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/12g_pkg_reservas.sql` | `SGCD_PKG_RESERVAS`: `disponible` (1/0), `crear_reserva`, `crear_solicitud_web`, `confirmar_reserva`, `cancelar_reserva`, `reprogramar_reserva` y `marcar_completadas` |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Bloque de la unidad 7 con 39 comprobaciones nuevas |
+| `sql/README.md`, `README.md`, `docs/diseno/2026-11-23-plan-19-tablas.md` | Orden de ejecución y estado: 7 de 11 unidades |
+
+**Decisiones de la sesión.** Horizonte de reserva de 90 días como constante del paquete, no como
+dato en tabla (Q1). Una solicitud web pendiente retiene el bloque hasta confirmarse o cancelarse
+(Q2). `COMPLETADA` se escribe con `marcar_completadas`, que cierra las `CONFIRMADA` con término ya
+pasado y no toca las `CANCELADA` (Q3). Al reprogramar, `IMPORTE_ACORDADO = GREATEST(total nuevo,
+importe actual, pagado vigente)`: igual se arrastra, mayor deja diferencia por cobrar, menor se
+mantiene sin reembolso (Q4). `disponible` devuelve `NUMBER` 1/0 porque un `BOOLEAN` de PL/SQL no se
+puede invocar desde PHP con `SELECT ... FROM dual`.
+
+**Verificación.** Esquema `SGCD19` sobre `oracle-free`: `SGCD_PKG_RESERVAS` `VALID`. `14_` con
+**161 comprobaciones en verde** en 7 bloques (39 de esta unidad) y 0 fallas; al terminar, 0 reservas
+y 0 pagos persistidos (todo revierte). Se cubren choque por solape, grande contra 1-3 en ambos
+sentidos, candado ordenado, cancha en mantención, modalidad no admitida, lunes cerrado, domingo con
+cierre a las 20:00, pasado y horizonte, solicitud web, reprogramación con pago y cierre de vencidas.
+
+**Hallazgos abiertos**
+
+1. Una solicitud web `PENDIENTE` cuya hora ya pasó retiene el bloque indefinidamente y no se puede
+   confirmar (`-20044`). Falta que el panel la cancele o una barrida programada.
+2. La unidad 9 (torneos) necesita el mismo núcleo de ventana, candado y solape. Al abrirla se
+   extrae el núcleo a un procedimiento compartido o se expone `reservar_torneo`; no se duplica.
+3. `reprogramar_reserva` nunca baja el importe, incluso sin pago: es la regla de Q4, no un error.
+
+**Siguiente.** Unidad 8: `SGCD_PKG_PAGOS` con un pago por reserva, importe igual al acordado, cobro
+de la diferencia tras reprogramar, anulación y recobro sobre la misma fila.
+
+---
+
+## 2026-11-24 (2) — Fase 3, unidad 8: `SGCD_PKG_PAGOS`
+
+**Contexto.** Sobre la unidad 7, se cierra el pago de la reserva con las reglas de la sesión: un
+pago único por reserva, por adelantado y por el total; anular es el reembolso; la diferencia de una
+reprogramación al alza se cobra; no hay parciales ni sobrepago. Sin cambios de tabla.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/12h_pkg_pagos.sql` | `SGCD_PKG_PAGOS`: `registrar_pago`, `cobrar_diferencia`, `anular_pago`, `pago_de_reserva` y `saldo_reserva` |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Bloque de la unidad 8 con 24 comprobaciones nuevas |
+| `sql/README.md`, `README.md`, `docs/diseno/2026-11-23-plan-19-tablas.md` | Orden de ejecución y estado: 8 de 11 unidades |
+
+**Decisiones de la sesión.** Solo pago por adelantado: la reserva debe estar `CONFIRMADA`; una
+`PENDIENTE`, `CANCELADA` o `COMPLETADA` no se cobra (Q1). Anular se permite aunque la reserva esté
+cancelada, y es el único mecanismo de devolución (Q2). Cobra cualquier administrador activo; en las
+19 tablas ya no existe `PERFIL` (Q3). Importe exacto, sin redondeo ni propina (Q4). El bloqueo es
+siempre reserva y después pago, para que dos cajas no cobren a la vez.
+
+**Verificación.** `SGCD19` sobre `oracle-free`: `SGCD_PKG_PAGOS` `VALID`, 5 paquetes `SGCD_PKG_*`
+válidos. `14_` con **185 comprobaciones en verde** en 8 bloques (24 de esta unidad) y 0 fallas; al
+terminar, 0 reservas y 0 pagos persistidos. Cubre pago normal, doble pago, anulación, recobro sobre
+la misma fila, reembolso de reserva cancelada, rechazo en pendiente/cancelada/completada, medio
+fuera de catálogo, administrador inactivo, diferencia al alza y saldo en cero.
+
+**Hallazgos abiertos**
+
+1. La fila única no guarda historial: recobrar sobrescribe importe, fecha y medio del pago anulado.
+   Es la regla cerrada, pero si en la defensa preguntan por la trazabilidad del pago, la respuesta
+   es la fila única; `SGCD_AUDITORIA_CLIENTES` no cubre pagos.
+2. `anular_pago` no devuelve nada ni deja motivo; el panel tendrá que registrar el motivo en su
+   propia bitácora si se exige.
+3. La validación del administrador está duplicada entre `12g` y `12h` (8 líneas). No se extrajo:
+   un paquete compartido para dos consultas sería peor que la duplicación.
+
+**Siguiente.** Unidad 9: `SGCD_PKG_TORNEOS` con inscripción completa en una transacción (capitán,
+nómina y `CANTIDAD_JUGADORES`), bloqueo del torneo y del último cupo, RUT único por torneo y
+programación de bloques sin cliente reutilizando el núcleo de reservas.
+
+---
+
+## 2026-11-24 (3) — Fase 3, unidad 9: `SGCD_PKG_TORNEOS`
+
+**Contexto.** La programación de torneos no inserta reservas por su cuenta: `SGCD_PKG_TORNEOS`
+llama a `SGCD_PKG_RESERVAS.crear_reserva_torneo`, que reutiliza ventana, candado ordenado y regla de
+solape. La inscripción trabaja con nómina real, cupos y RUT único por torneo. Sin cambios de tabla.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/12g_pkg_reservas.sql` | `crear_reserva_torneo` y el núcleo `insertar_reserva` compartido con la reserva normal |
+| `sql/oracle/12i_pkg_torneos.sql` | `SGCD_PKG_TORNEOS`: `crear_torneo`, `inscribir_equipo`, `agregar_jugador`, `retirar_equipo`, `ajustar_maximo` y `programar_torneo` |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Bloque de la unidad 9 con 33 comprobaciones nuevas |
+| `sql/README.md`, `README.md`, `docs/diseno/2026-11-23-plan-19-tablas.md` | Orden de ejecución y estado: 9 de 11 unidades |
+
+**Decisiones de la sesión.** Torneos llama a `crear_reserva_torneo`; la reserva de torneo toma la
+modalidad del torneo, no lleva cliente y nace `CONFIRMADA` con la tarifa vigente (mismo criterio que
+la v3, que arrendaba el bloque). La inscripción agenda al capitán como primer jugador y cada
+compañero entra con `agregar_jugador` dentro de la misma transacción del API; `CANTIDAD_JUGADORES`
+se recalcula desde los vínculos. Un torneo `PLANIFICADO` recibe inscripciones; `EN_CURSO` sigue
+recibiendo programación pero no cambios de plantilla. El retiro libera cupo y RUT y es idempotente.
+`programar_torneo` divide el rango en bloques de una hora y usa un `SAVEPOINT` para que un choque a
+mitad de rango no deje medios horarios programados.
+
+**Verificación.** `SGCD19` sobre `oracle-free`: 6 paquetes `SGCD_PKG_*` `VALID`. `14_` con **218
+comprobaciones en verde** en 9 bloques (33 de esta unidad) y 0 fallas; al terminar, 0 reservas,
+0 pagos y 0 inscripciones persistidas (los 3 torneos son del catálogo). Cubre cupos, nombre repetido,
+RUT repetido en el equipo y en otro equipo del torneo, máximo de plantilla, ajuste de máximo, retiro
+que libera cupo y RUT, bloqueo del calendario compartido, choque a mitad de rango sin residuos,
+lunes cerrado y cierre.
+
+**Hallazgos abiertos**
+
+1. `obtener_jugador` reutiliza la fila por RUT y, cuando no hay ficha de cliente, adopta el nombre
+   que manda la última inscripción. Dos equipos con grafías distintas comparten un solo nombre.
+2. El cierre de inscripciones "al inicio del primer bloque" que pide `TORNEOS_ORACLE.md` no está en
+   el paquete: hoy manda solo el estado del torneo. Decidir si se implementa aquí o en el portal.
+3. La programación toma la tarifa vigente: si el club no cobra sus propios bloques de torneo, habrá
+   que pasar el importe en 0 desde una regla nueva, no desde el paquete.
+
+**Siguiente.** Unidad 10: `SGCD_PKG_CONSULTAS` con los tres reportes (ingresos, reservas por cancha
+y clientes por reservas) y filtro de propiedad.
+
+---
+
+## 2026-11-24 (4) — Fase 3, unidad 10: `SGCD_PKG_CONSULTAS`
+
+**Contexto.** Se cierran los tres reportes del recinto con rango de fechas obligatorio (decisión de
+Naiko) y filtro de propiedad opcional. El reporte de ingresos queda como herramienta de
+administración: no recibe `p_id_cliente`, y "mis pagos" del portal sale de `SGCD_PKG_PAGOS`.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/12j_pkg_consultas.sql` | `SGCD_PKG_CONSULTAS`: `ingresos`, `reservas_por_cancha` y `clientes_por_reservas`, cada uno con su `SYS_REFCURSOR` |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Bloque de la unidad 10 con 15 comprobaciones nuevas |
+| `sql/README.md`, `README.md`, `docs/diseno/2026-11-23-plan-19-tablas.md` | Orden de ejecución y estado: 10 de 11 unidades, los 7 paquetes completos |
+
+**Decisiones de la sesión.** Rango obligatorio con borde inclusivo (`p_desde` 00:00, `p_hasta`
+23:59:59) y tope de 366 días, con `-20080` para rango nulo, invertido o excesivo. Ingresos suma solo
+`PAGADO` y se agrupa por día. Reservas por cancha cuenta las no `CANCELADA` que empiezan en el rango,
+incluidos los bloques de torneo, con horas e importe acordado. Clientes por reservas excluye las de
+torneo (no tienen cliente) y ordena por cantidad. El filtro `p_id_cliente` aplica a los dos reportes
+de reservas; con `NULL` es la vista de administración.
+
+**Verificación.** `SGCD19` sobre `oracle-free`: 7 paquetes `SGCD_PKG_*` `VALID`. `14_` con **233
+comprobaciones en verde** en 10 bloques (15 de esta unidad) y 0 fallas; al terminar, 0 reservas,
+0 pagos y 0 inscripciones. Cubre suma por día, día sin movimiento, rango invertido/nulo/excesivo,
+conteo con y sin filtro de cliente, exclusión de la reserva cancelada, inclusión del bloque de
+torneo en ocupación, exclusión del torneo en el ranking y RUT con dígito verificador.
+
+**Hallazgos abiertos**
+
+1. `ingresos` devuelve solo los días con movimiento; el panel debe rellenar los días vacíos si
+   quiere una serie continua.
+2. Las reservas `PENDIENTE` cuentan como ocupación y suman su importe acordado, aunque aún no estén
+   pagadas. Es consistente con la definición de ocupación, pero el reporte de canchas no es un
+   reporte de caja.
+
+**Siguiente.** Unidad 11: batería de integración con dos sesiones SQL*Plus reales (dos reservas del
+mismo bloque, grande contra 1-2-3 en ambos sentidos, último cupo de torneo y doble pago), en un
+archivo aparte porque `14_` corre en un solo bloque anónimo.
+
+---
+
+## 2026-11-24 (5) — Fase 3, unidad 11: integración con dos sesiones
+
+**Contexto.** La última unidad de la fase 3 no agrega reglas: comprueba con dos conexiones SQL*Plus
+reales que los candados de las unidades 7, 8 y 9 hacen lo que dicen. La sesión A opera, duerme
+dentro de la transacción con `DBMS_SESSION.SLEEP` y recién después confirma; la B intenta lo mismo y
+debe esperar el candado y recibir el código exacto.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `tests/integracion_dos_sesiones.sh` | Orquestador: fixture con `COMMIT`, cinco carreras, limpieza idempotente y resumen |
+| `tests/sesion.sql` | Bloque que ejecuta cada conexión según caso y rol |
+| `README.md`, `sql/README.md`, `docs/diseno/2026-11-23-plan-19-tablas.md` | Fase 3 cerrada (11 de 11) |
+
+**Casos y verificación.** `bash tests/integracion_dos_sesiones.sh` → **17 comprobaciones en verde**:
+mismo bloque en la misma cancha (una reserva y la otra `-20043`), grande contra componente 1 y
+componente 2 contra grande (la segunda `-20043` en ambos sentidos), último cupo de un torneo (una
+inscripción y la otra `-20063`) y doble pago (uno y el otro `-20053`). Se corrió dos veces seguidas:
+la segunda pasada deja 0 reservas, 0 pagos, 0 inscripciones y los 3 torneos del catálogo, así que el
+script es idempotente.
+
+**Estado de la fase 3.** Cerrada con 7 paquetes `SGCD_PKG_*` (`AUTH`, `CLIENTES`, `CONSULTAS`,
+`PAGOS`, `RESERVAS`, `TARIFAS`, `TORNEOS`), 9 mantenedores y 233 comprobaciones de contrato en
+`14_`, más las 17 de concurrencia. Ninguna tabla del UML se modificó.
+
+**Pendiente inmediato.** Un solo commit con toda la fase 3 en el árbol de trabajo (regla de Naiko:
+no commitear hasta cerrar la unidad 11), y después la fase 4: conectar el portal y el panel a los
+paquetes.

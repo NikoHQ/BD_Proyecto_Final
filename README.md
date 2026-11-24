@@ -4,12 +4,14 @@ Proyecto de **INF324 / ES3**. Motor de base de datos Oracle 26ai Free en Docker,
 en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administración con AdminLTE.
 **Entrega:** 2026-11-27.
 
-**Estado hoy (2026-11-23):** el equipo cerró el **UML objetivo de 19 tablas**
+**Estado hoy (2026-11-24):** el equipo cerró el **UML objetivo de 19 tablas**
 ([fuente](23-11-26/UML_objetivo_19_tablas.mdj) y [mapa de integración](docs/entrega/MODELO_OBJETIVO.md)).
-Ya están el **DDL de instalación de las 19 tablas** y los **catálogos del recinto único**, compilados
-y probados en un esquema limpio (`10`, `11` y `13` de `sql/oracle/`). El portal de clientes y el
-panel administrativo están disponibles en modo demostración; el acceso de personal y la consulta de
-catálogo usan Oracle. **Siguiente paso:** adaptar los 6 paquetes al modelo objetivo y conectar la web.
+Ya están el **DDL de instalación de las 19 tablas**, los **catálogos del recinto único** y **los 7
+paquetes** del modelo (`10` a `14` de `sql/oracle/`), compilados y con **233 comprobaciones en
+verde** en un esquema limpio, más **17 comprobaciones de concurrencia** con dos sesiones reales
+(`tests/integracion_dos_sesiones.sh`). El portal de clientes y el panel administrativo están
+disponibles en modo demostración; el acceso de personal y la consulta de catálogo usan Oracle.
+**Siguiente paso:** conectar la web a los paquetes (fase 4).
 
 - [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
 - [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
@@ -44,7 +46,7 @@ catálogo usan Oracle. **Siguiente paso:** adaptar los 6 paquetes al modelo obje
 |---|---|---|
 | `sql/oracle/10_ddl_sgcd_19.sql` | **Esquema de 19 tablas del UML**: PK, FK, `UNIQUE`, `CHECK`, índices, 16 secuencias y 18 triggers (16 de llave y los 2 de auditoría) | compilado y probado |
 | `sql/oracle/11_catalogos_sgcd_19.sql` | Recinto único, 10 canchas con la grande y sus componentes, 3 deportes, 3 modalidades, 6 horarios, 82 bloques, 120 tarifas, 3 torneos y cuentas de laboratorio | cargado |
-| `sql/oracle/12a_pkg_auth.sql` … `12f_pkg_tarifas.sql` | Paquetes y mantenedores adaptados al modelo objetivo | 3 de 6 paquetes y 9 mantenedores compilados |
+| `sql/oracle/12a_pkg_auth.sql` … `12j_pkg_consultas.sql` | Paquetes y mantenedores adaptados al modelo objetivo | los 7 paquetes y 9 mantenedores compilados |
 | `sql/oracle/13_pruebas_sgcd_19.sql` | Comprobaciones del DDL y los catálogos, con reversa final | en verde |
 | `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de los paquetes y mantenedores, por unidad | en verde |
 
@@ -99,9 +101,10 @@ documento en el mismo commit.
 
 ## Qué falta
 
-1. **Completar los paquetes del modelo objetivo** (en `sql/oracle/12a`…`12f`): faltan RESERVAS con
-   bloques consecutivos y regla de la cancha grande, PAGOS, TORNEOS con nómina completa y CONSULTAS.
-   Ya están AUTH, CLIENTES, TARIFAS y los nueve mantenedores de Ignacio.
+1. **Conectar la web a los paquetes** (fase 4): endpoints con sesión, perfil y CSRF, y reemplazar
+   `demo/store.js`, `demo/fixtures.js`, `demo/tournaments.js` y `cliente/demo.php` por `fetch` a los
+   paquetes. La fase 3 quedó cerrada con 7 paquetes, 9 mantenedores, 233 pruebas de contrato y la
+   batería de concurrencia.
 2. Conectar la web a esos paquetes (hoy todo sigue en la v3 y en la demo).
 3. Los 5 gestores: reservas con precio por bloques consecutivos y sin cruce grande/1-2-3, pago
    único por reserva, inscripción de equipos con nómina y último cupo, programación de torneos sin

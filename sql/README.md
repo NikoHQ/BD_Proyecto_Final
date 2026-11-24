@@ -16,8 +16,17 @@ Ejecutar **en orden**, conectado como el esquema dueño (`SGCD`), no como `SYSTE
 | 12d | `oracle/12d_mantenedores_horario.sql` | Procedimientos de Ignacio: horario, bloque y administrador | no |
 | 12e | `oracle/12e_mantenedor_tarifas.sql` | Procedimientos de Ignacio: tarifas por cancha, modalidad, día y franja | no |
 | 12f | `oracle/12f_pkg_tarifas.sql` | `SGCD_PKG_TARIFAS`: valor por bloque y cotización de N bloques con detalle | no |
+| 12g | `oracle/12g_pkg_reservas.sql` | `SGCD_PKG_RESERVAS`: bloques consecutivos, choque por solape, candado ordenado de la cancha grande/1-2-3, solicitud web pendiente, cancelación, reprogramación y cierre de vencidas | no |
+| 12h | `oracle/12h_pkg_pagos.sql` | `SGCD_PKG_PAGOS`: pago único por adelantado y por el total, cobro de la diferencia tras reprogramar, anulación como reembolso y saldo por reserva | no |
+| 12i | `oracle/12i_pkg_torneos.sql` | `SGCD_PKG_TORNEOS`: torneo, inscripción con nómina y cupos, RUT único por torneo, retiro y programación por bloques que entra a reservas | no |
+| 12j | `oracle/12j_pkg_consultas.sql` | `SGCD_PKG_CONSULTAS`: ingresos, reservas por cancha y clientes por reservas, con rango obligatorio y filtro de propiedad | no |
 | 13 | `oracle/13_pruebas_sgcd_19.sql` | Comprobaciones del DDL y los catálogos: objetos, coherencia, IDs automáticos, auditoría y reglas negativas. Revierte todo al final | no, limpia al final |
 | 14 | `oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de los paquetes y mantenedores, por unidad. Revierte todo al final | no, limpia al final |
+
+Las carreras entre dos conexiones no caben en un bloque anónimo: viven en
+`tests/integracion_dos_sesiones.sh` con `tests/sesion.sql`, y se ejecutan con
+`bash tests/integracion_dos_sesiones.sh`. Crean su propio fixture con `COMMIT`, lo borran al
+terminar y dejan el esquema limpio.
 
 Instalación rápida (el `NLS_LANG` es obligatorio: sin él, SQL*Plus en un contenedor sin locale
 convierte los acentos y la "·" en caracteres de reemplazo al insertar):
