@@ -1,0 +1,231 @@
+@startuml SGCD_objetivo
+
+title SGCD - modelo objetivo del equipo
+hide methods
+hide stereotypes
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+legend right
+  Modelo objetivo para integrar la base de Nico con el portal de Eric.
+  Alcance: un recinto, futbol, tenis y padel.
+  La cancha grande esta formada solo por las canchas 1, 2 y 3.
+  Membresias, puntos, bloqueos programados y torneos complejos quedan fuera.
+endlegend
+
+package "Recinto y catalogos" {
+  entity RECINTO {
+    * ID_RECINTO : NUMBER
+    --
+    NOMBRE_RECINTO : VARCHAR2(100)
+    DIRECCION_RECINTO : VARCHAR2(150)
+    ESTADO_RECINTO : VARCHAR2(10)
+  }
+
+  entity HORARIO {
+    * ID_HORARIO : NUMBER
+    --
+    ID_RECINTO : NUMBER <<FK>>
+    DIA_SEMANA : NUMBER
+    HORA_APERTURA : VARCHAR2(5)
+    HORA_CIERRE : VARCHAR2(5)
+  }
+
+  entity BLOQUE_HORARIO {
+    * ID_BLOQUE_HORARIO : NUMBER
+    --
+    ID_HORARIO : NUMBER <<FK>>
+    HORA_INICIO : VARCHAR2(5)
+    HORA_TERMINO : VARCHAR2(5)
+  }
+
+  entity DEPORTE {
+    * ID_DEPORTE : NUMBER
+    --
+    NOMBRE_DEPORTE : VARCHAR2(50)
+    ESTADO_DEPORTE : VARCHAR2(10)
+  }
+
+  entity MODALIDAD {
+    * ID_MODALIDAD : NUMBER
+    --
+    ID_DEPORTE : NUMBER <<FK>>
+    NOMBRE_MODALIDAD : VARCHAR2(80)
+    ESTADO_MODALIDAD : VARCHAR2(10)
+  }
+
+  entity CANCHA {
+    * ID_CANCHA : NUMBER
+    --
+    ID_RECINTO : NUMBER <<FK>>
+    NOMBRE_CANCHA : VARCHAR2(100)
+    TIPO_CANCHA : VARCHAR2(20)
+    ESTADO_CANCHA : VARCHAR2(15)
+  }
+
+  entity CANCHA_MODALIDAD {
+    * ID_CANCHA : NUMBER <<PK, FK>>
+    * ID_MODALIDAD : NUMBER <<PK, FK>>
+  }
+
+  entity CANCHA_COMPONENTE {
+    * ID_CANCHA_GRANDE : NUMBER <<PK, FK>>
+    * ID_CANCHA_PEQUENA : NUMBER <<PK, FK>>
+    --
+    Nota: una sola cancha grande usa 1, 2 y 3.
+  }
+
+  entity TARIFA {
+    * ID_TARIFA : NUMBER
+    --
+    ID_CANCHA : NUMBER <<FK>>
+    ID_MODALIDAD : NUMBER <<FK>>
+    DIA_SEMANA : NUMBER
+    HORA_DESDE : VARCHAR2(5)
+    HORA_HASTA : VARCHAR2(5)
+    VIGENTE_DESDE : DATE
+    VIGENTE_HASTA : DATE
+    VALOR_HORA : NUMBER
+    ESTADO_TARIFA : VARCHAR2(10)
+  }
+
+  entity TORNEO {
+    * ID_TORNEO : NUMBER
+    --
+    ID_MODALIDAD : NUMBER <<FK>>
+    NOMBRE_TORNEO : VARCHAR2(100)
+    FECHA_INICIO : DATE
+    FECHA_TERMINO : DATE
+    CUPOS_TORNEO : NUMBER
+    ESTADO_TORNEO : VARCHAR2(15)
+  }
+}
+
+package "Personas y acceso" {
+  entity USUARIO {
+    * ID_USUARIO : NUMBER
+    --
+    LOGIN : VARCHAR2(50) <<UNIQUE>>
+    CLAVE_HASH : VARCHAR2(255)
+    ROL : VARCHAR2(20)
+    ESTADO_USUARIO : VARCHAR2(10)
+  }
+
+  entity CLIENTE {
+    * ID_CLIENTE : NUMBER
+    --
+    ID_USUARIO : NUMBER <<FK, UNIQUE, opcional>>
+    RUT_CLIENTE : NUMBER <<UNIQUE>>
+    DV_CLIENTE : VARCHAR2(1)
+    NOMBRE_CLIENTE : VARCHAR2(100)
+    CORREO_CLIENTE : VARCHAR2(150)
+    TELEFONO_CLIENTE : VARCHAR2(20)
+    ESTADO_CLIENTE : VARCHAR2(10)
+  }
+
+  entity ADMINISTRADOR {
+    * ID_ADMINISTRADOR : NUMBER
+    --
+    ID_USUARIO : NUMBER <<FK, UNIQUE>>
+    NOMBRE_ADMINISTRADOR : VARCHAR2(100)
+    ESTADO_ADMINISTRADOR : VARCHAR2(10)
+  }
+}
+
+package "Reservas y pagos" {
+  entity RESERVA {
+    * ID_RESERVA : NUMBER
+    --
+    ID_CLIENTE : NUMBER <<FK>>
+    ID_ADMINISTRADOR : NUMBER <<FK, opcional>>
+    ID_CANCHA : NUMBER <<FK>>
+    ID_MODALIDAD : NUMBER <<FK>>
+    ID_TORNEO : NUMBER <<FK, opcional>>
+    INICIO_RESERVA : DATE
+    TERMINO_RESERVA : DATE
+    IMPORTE_ACORDADO : NUMBER
+    ORIGEN_RESERVA : VARCHAR2(10)
+    ESTADO_RESERVA : VARCHAR2(15)
+  }
+
+  entity INSCRIPCION_TORNEO {
+    * ID_INSCRIPCION : NUMBER
+    --
+    ID_TORNEO : NUMBER <<FK>>
+    ID_CLIENTE : NUMBER <<FK>>
+    FECHA_INSCRIPCION : DATE
+    ESTADO_INSCRIPCION : VARCHAR2(15)
+  }
+
+  entity PAGO {
+    * ID_PAGO : NUMBER
+    --
+    ID_RESERVA : NUMBER <<FK>>
+    IMPORTE_PAGO : NUMBER
+    FECHA_PAGO : DATE
+    MEDIO_PAGO : VARCHAR2(20)
+    ESTADO_PAGO : VARCHAR2(15)
+  }
+
+  entity AUDITORIA_CLIENTE {
+    * ID_AUDITORIA : NUMBER
+    --
+    ID_CLIENTE : NUMBER <<historico>>
+    ID_ADMINISTRADOR : NUMBER <<opcional>>
+    ACCION : VARCHAR2(10)
+    FECHA_EVENTO : DATE
+    VALORES_ANTERIORES : VARCHAR2(4000)
+    VALORES_NUEVOS : VARCHAR2(4000)
+  }
+}
+
+RECINTO ||--o{ HORARIO : define
+HORARIO ||--o{ BLOQUE_HORARIO : divide
+RECINTO ||--o{ CANCHA : contiene
+DEPORTE ||--o{ MODALIDAD : ofrece
+CANCHA ||--o{ CANCHA_MODALIDAD : permite
+MODALIDAD ||--o{ CANCHA_MODALIDAD : se_juega_en
+CANCHA ||--o{ TARIFA : tiene
+MODALIDAD ||--o{ TARIFA : tarifa_para
+MODALIDAD ||--o{ TORNEO : usa
+TORNEO ||--o{ INSCRIPCION_TORNEO : recibe
+CLIENTE ||--o{ INSCRIPCION_TORNEO : realiza
+TORNEO |o--o{ RESERVA : utiliza
+
+CANCHA ||--o{ CANCHA_COMPONENTE : cancha_grande
+CANCHA ||--o{ CANCHA_COMPONENTE : cancha_pequena
+
+USUARIO ||--o| CLIENTE : perfil_cliente
+USUARIO ||--o| ADMINISTRADOR : perfil_admin
+CLIENTE ||--o{ RESERVA : realiza
+ADMINISTRADOR |o--o{ RESERVA : registra
+CANCHA ||--o{ RESERVA : se_reserva
+MODALIDAD ||--o{ RESERVA : corresponde
+RESERVA ||--o| PAGO : recibe
+ADMINISTRADOR |o--o{ AUDITORIA_CLIENTE : origina
+
+note "Disponibilidad de cancha grande" as N1
+  La cancha grande solo aparece si estan libres
+  las canchas 1, 2 y 3 en todo el intervalo.
+  Si se reserva la cancha grande, las tres pequenas
+  quedan ocupadas para ese mismo horario.
+end note
+N1 .. CANCHA_COMPONENTE
+
+note "Precio" as N2
+  La reserva usa bloques horarios de una hora.
+  El importe suma cada bloque segun cancha,
+  modalidad, dia y franja horaria.
+  La reserva conserva el precio historico.
+end note
+N2 .. TARIFA
+
+note "Pendiente" as N3
+  Definir reglas concretas de tenis y padel.
+  Los torneos quedan fuera del modelo base
+  hasta que el grupo confirme su alcance.
+end note
+N3 .. MODALIDAD
+
+@enduml

@@ -1,0 +1,188 @@
+-- Ejecutar cada bloque por separado y revisar el error esperado.
+-- Usar una conexion de pruebas, sin otros cambios pendientes.
+-- Los bloques que crean datos hacen ROLLBACK antes de mostrar el error.
+
+-- E1. Esperado -20101: ID nulo.
+BEGIN
+    SGCD_ACTUALIZAR_FICHA_CLIENTE(NULL, 'NOMBRE', NULL, NULL);
+
+END;
+/
+
+-- E2. Esperado -20101: ID fraccionario.
+BEGIN
+    SGCD_ACTUALIZAR_FICHA_CLIENTE(1.5, 'NOMBRE', NULL, NULL);
+
+END;
+/
+
+-- E3. Esperado -20102: nombre de espacios, antes de buscar la ficha.
+BEGIN
+    SGCD_ACTUALIZAR_FICHA_CLIENTE(1, '   ', NULL, NULL);
+
+END;
+/
+
+-- E4. Esperado -20103: este ID supera el maximo de la columna y no puede existir.
+BEGIN
+    SGCD_ACTUALIZAR_FICHA_CLIENTE(10000000000, 'NOMBRE', NULL, NULL);
+    ROLLBACK;
+    RAISE_APPLICATION_ERROR(
+        -20999,
+        'FALLO: SE ACEPTO UN ID INEXISTENTE'
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+
+END;
+/
+
+-- E5. Esperado -20105: ID cero al borrar.
+BEGIN
+    SGCD_BORRAR_FICHA_CLIENTE(0);
+
+END;
+/
+
+-- E6. Esperado -20106: borrar una ficha que no existe.
+BEGIN
+    SGCD_BORRAR_FICHA_CLIENTE(10000000000);
+    ROLLBACK;
+    RAISE_APPLICATION_ERROR(
+        -20999,
+        'FALLO: SE ACEPTO UN ID INEXISTENTE'
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+
+END;
+/
+
+-- E7. Esperado -20104: intentar usar el correo de otra ficha.
+DECLARE
+    RUT_V NUMBER;
+    ID_V NUMBER;
+    CORREO_V VARCHAR2(150);
+
+BEGIN
+
+    SELECT NVL(MAX(RUT_CLIENTE), 0) + 1
+    INTO RUT_V
+    FROM SGCD_CLIENTES;
+
+    IF RUT_V + 1 > 99999999 THEN
+        RAISE_APPLICATION_ERROR(
+            -20990,
+            'REVISAR RUT DE PRUEBA'
+        );
+    END IF;
+    CORREO_V := 'duplicado_' || RUT_V || '@prueba.cl';
+    INSERT INTO SGCD_CLIENTES (RUT_CLIENTE, DV_CLIENTE, NOMBRE_CLIENTE, CORREO_CLIENTE)
+    VALUES (RUT_V, '0', 'PRUEBA UNO', CORREO_V);
+    INSERT INTO SGCD_CLIENTES (RUT_CLIENTE, DV_CLIENTE, NOMBRE_CLIENTE)
+    VALUES (RUT_V + 1, '0', 'PRUEBA DOS');
+
+    SELECT ID_CLIENTE
+    INTO ID_V
+    FROM SGCD_CLIENTES
+    WHERE RUT_CLIENTE = RUT_V + 1 AND DV_CLIENTE = '0';
+    SGCD_ACTUALIZAR_FICHA_CLIENTE(ID_V, 'NO DEBE CAMBIAR', NULL, CORREO_V);
+    ROLLBACK;
+    RAISE_APPLICATION_ERROR(
+        -20999,
+        'FALLO: SE ACEPTO UN CORREO DUPLICADO'
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+
+END;
+/
+
+-- E8. Esperado ORA-02290 por CK_SGCD_CLIENTE_CORREO: formato incorrecto.
+DECLARE
+    RUT_V NUMBER;
+    ID_V NUMBER;
+
+BEGIN
+
+    SELECT NVL(MAX(RUT_CLIENTE), 0) + 1
+    INTO RUT_V
+    FROM SGCD_CLIENTES;
+
+    IF RUT_V > 99999999 THEN
+        RAISE_APPLICATION_ERROR(
+            -20990,
+            'REVISAR RUT DE PRUEBA'
+        );
+    END IF;
+    INSERT INTO SGCD_CLIENTES (RUT_CLIENTE, DV_CLIENTE, NOMBRE_CLIENTE)
+    VALUES (RUT_V, '0', 'PRUEBA FORMATO');
+
+    SELECT ID_CLIENTE
+    INTO ID_V
+    FROM SGCD_CLIENTES
+    WHERE RUT_CLIENTE = RUT_V AND DV_CLIENTE = '0';
+    SGCD_ACTUALIZAR_FICHA_CLIENTE(ID_V, 'PRUEBA FORMATO', NULL, 'sin-arroba');
+    ROLLBACK;
+    RAISE_APPLICATION_ERROR(
+        -20999,
+        'FALLO: SE ACEPTO CORREO INVALIDO'
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+
+END;
+/
+
+-- E9. Esperado -20107: una credencial vinculada impide borrar la ficha.
+DECLARE
+    RUT_V NUMBER;
+    ID_V NUMBER;
+
+BEGIN
+
+    SELECT NVL(MAX(RUT_CLIENTE), 0) + 1
+    INTO RUT_V
+    FROM SGCD_CLIENTES;
+
+    IF RUT_V > 99999999 THEN
+        RAISE_APPLICATION_ERROR(
+            -20990,
+            'REVISAR RUT DE PRUEBA'
+        );
+    END IF;
+    INSERT INTO SGCD_CLIENTES (RUT_CLIENTE, DV_CLIENTE, NOMBRE_CLIENTE)
+    VALUES (RUT_V, '0', 'PRUEBA CON DEPENDENCIA');
+
+    SELECT ID_CLIENTE
+    INTO ID_V
+    FROM SGCD_CLIENTES
+    WHERE RUT_CLIENTE = RUT_V AND DV_CLIENTE = '0';
+    INSERT INTO SGCD_CREDENCIALES (LOGIN_CREDENCIAL, CLAVE_HASH_CREDENCIAL, ID_CLIENTE)
+    VALUES ('PRUEBA_' || ID_V, 'SOLO_PRUEBA_NO_USAR_PARA_LOGIN', ID_V);
+    SGCD_BORRAR_FICHA_CLIENTE(ID_V);
+    ROLLBACK;
+    RAISE_APPLICATION_ERROR(
+        -20999,
+        'FALLO: SE BORRO CLIENTE CON DEPENDENCIA'
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+
+END;
+/
