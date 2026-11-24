@@ -490,3 +490,35 @@ no existe.
 sin `ID_MODALIDAD` · columnas de auditoría (valores serializados de Pablo vs una columna por campo de
 Ignacio) · rol `OPERADOR` fuera del UML · "partidos y bloqueos" del calendario fuera de alcance ·
 secuencias y triggers de las 19 tablas.
+
+---
+
+## 2026-11-23 (2) — DDL de 19 tablas y catálogos del recinto único, compilados y probados
+
+**Contexto.** Cerradas las decisiones con Naiko: 19 tablas, `TARIFA` con `ID_MODALIDAD`, auditoría
+en la forma del UML con JSON de formato fijo, roles solo `ADMINISTRADOR` y `CLIENTE`, y calendario
+limitado a reservas.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/10_ddl_sgcd_19.sql` | Esquema objetivo: 19 tablas con PK, FK, `UNIQUE`, `CHECK`, `DEFAULT`, índices, 16 secuencias, 18 triggers (16 de llave y `TRG_SGCD_CLIENTES_AU`/`AD`), más `SGCD_JSON_TEXTO` |
+| `sql/oracle/11_catalogos_sgcd_19.sql` | Recinto único, 10 canchas (6 de fútbol 6, la grande y 3 sueltas), componentes 1-2-3, 3 deportes, 3 modalidades, 6 horarios, 82 bloques, 120 tarifas, 3 torneos y cuentas `admin`/`demo`/`nuevo` |
+| `sql/oracle/13_pruebas_sgcd_19.sql` | 22 comprobaciones: objetos, coherencia de catálogos, ID automático, auditoría y negativas con su `ORA-` exacto |
+| `sql/README.md` | Orden de ejecución nuevo, nota de `NLS_LANG` y regla de IDs por secuencia |
+| `README.md`, `docs/entrega/ACCESO_DEMO.md` | Estado al 23-11 y cómo instalar el modelo de 19 tablas aparte de la v3 |
+| `docs/diseno/2026-11-23-plan-19-tablas.md` | Fases 1 y 2 marcadas como hechas; notas técnicas del DDL |
+
+**Verificación.** Esquema limpio `SGCD19` en `oracle-free/FREEPDB1`: 19 tablas, 16 secuencias,
+18 triggers `ENABLED`, 0 objetos con error. `13_pruebas_sgcd_19.sql`: 22/22 en verde, incluida la
+auditoría (`{"nombre":…,"telefono":null}` con el administrador 1), el rechazo de `OPERADOR`, el
+bloque duplicado y el segundo pago. Los catálogos quedaron con 120 tarifas y 82 bloques.
+
+**Hallazgo.** SQL*Plus dentro del contenedor corre sin locale: sin `NLS_LANG=AMERICAN_AMERICA.AL32UTF8`
+y `LANG=C.UTF-8`, cada acento y la "·" se guardan como U+FFFD. Se documentó en `sql/README.md`; la
+carga correcta se verificó con `DUMP` (`Fútbol` = 46,195,186,...).
+
+**Siguiente.** `12_paquetes_sgcd_19.sql`: AUTH sobre `SGCD_USUARIOS`, clientes con auditoría, tarifas
+por bloque, reservas con bloques consecutivos y regla de la cancha grande, torneos con nómina y
+pago único, más los mantenedores de Ignacio con los nombres del modelo.

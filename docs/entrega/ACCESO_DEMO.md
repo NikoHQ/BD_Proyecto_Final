@@ -25,6 +25,21 @@ desarrollo. En SQL*Plus, dentro del contenedor:
 docker exec -i oracle-free sqlplus sgcd@localhost/FREEPDB1 < sql/oracle/04_ddl_v3.sql
 ```
 
+> [!warning] Dos esquemas conviven hasta terminar la integración
+> La web de este repositorio todavía lee la v3 (`SGCD_CREDENCIALES`). El **modelo objetivo de 19
+> tablas** se instala y se prueba aparte, en un esquema de laboratorio, con `10`, `11` y `13`:
+>
+> ```sh
+> docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
+>   sqlplus -s -L SGCD19/<clave>@localhost/FREEPDB1 < sql/oracle/10_ddl_sgcd_19.sql
+> docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
+>   sqlplus -s -L SGCD19/<clave>@localhost/FREEPDB1 < sql/oracle/11_catalogos_sgcd_19.sql
+> docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
+>   sqlplus -s -L SGCD19/<clave>@localhost/FREEPDB1 < sql/oracle/13_pruebas_sgcd_19.sql
+> ```
+>
+> Sin las variables de idioma, SQL*Plus convierte los acentos en caracteres de reemplazo al insertar.
+
 Para un entorno aislado con Docker, `docker compose up -d` levanta la aplicación y la base y publica
 ambos paneles en el puerto **8080**. La alternativa PHP local del puerto **8091** (`php -S
 127.0.0.1:8091 -t web`) sirve para probar el portal por separado.

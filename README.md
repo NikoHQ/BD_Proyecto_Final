@@ -6,10 +6,10 @@ en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administració
 
 **Estado hoy (2026-11-23):** el equipo cerró el **UML objetivo de 19 tablas**
 ([fuente](23-11-26/UML_objetivo_19_tablas.mdj) y [mapa de integración](docs/entrega/MODELO_OBJETIVO.md)).
-La base de trabajo sigue siendo el esquema v3 de transición (**23 tablas** en este repositorio),
-con 6 paquetes PL/SQL `VALID` y catálogos cargados. El portal de clientes y el panel administrativo
-están disponibles en modo demostración; el acceso de personal y la consulta de catálogo usan Oracle.
-**Siguiente paso:** publicar el DDL de instalación de las 19 tablas y adaptar los paquetes a ese modelo.
+Ya están el **DDL de instalación de las 19 tablas** y los **catálogos del recinto único**, compilados
+y probados en un esquema limpio (`10`, `11` y `13` de `sql/oracle/`). El portal de clientes y el
+panel administrativo están disponibles en modo demostración; el acceso de personal y la consulta de
+catálogo usan Oracle. **Siguiente paso:** adaptar los 6 paquetes al modelo objetivo y conectar la web.
 
 - [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
 - [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
@@ -38,22 +38,32 @@ están disponibles en modo demostración; el acceso de personal y la consulta de
 
 ## La base, en orden
 
+### Modelo objetivo de 19 tablas (vigente)
+
+| Archivo | Qué hace | Estado |
+|---|---|---|
+| `sql/oracle/10_ddl_sgcd_19.sql` | **Esquema de 19 tablas del UML**: PK, FK, `UNIQUE`, `CHECK`, índices, 16 secuencias y 18 triggers (16 de llave y los 2 de auditoría) | compilado y probado |
+| `sql/oracle/11_catalogos_sgcd_19.sql` | Recinto único, 10 canchas con la grande y sus componentes, 3 deportes, 3 modalidades, 6 horarios, 82 bloques, 120 tarifas, 3 torneos y cuentas de laboratorio | cargado |
+| `sql/oracle/12_paquetes_sgcd_19.sql` | Paquetes PL/SQL adaptados al modelo objetivo | pendiente |
+| `sql/oracle/13_pruebas_sgcd_19.sql` | 22 comprobaciones del DDL y los catálogos, con reversa final | en verde |
+
+### Transición v3 (histórica)
+
 | Archivo | Qué hace | Estado |
 |---|---|---|
 | `sql/oracle/01_ddl_v2.sql` | Esquema v2: 17 tablas | histórico |
 | `sql/oracle/02_pruebas_v2.sql` | 26 pruebas de integridad de la v2 | histórico |
 | `sql/oracle/03_catalogos_v2.sql` | Catálogos de la v2 (2 recintos, 78 tarifas) | histórico |
-| `sql/oracle/04_ddl_v3.sql` | **Esquema v3 de transición: 23 tablas** (cliente web, credenciales, torneos, auditoría) | compilado |
-| `sql/oracle/05_paquetes_plsql.sql` | **6 paquetes de lógica de negocio** (12 objetos `VALID`), con el CRUD de la ficha y los 3 reportes | compilado |
+| `sql/oracle/04_ddl_v3.sql` | Esquema v3 de transición: 23 tablas (cliente web, credenciales, torneos, auditoría) | compilado |
+| `sql/oracle/05_paquetes_plsql.sql` | 6 paquetes de la v3, con el CRUD de la ficha y los 3 reportes | compilado |
 | `sql/oracle/06_catalogos_v3.sql` | Catálogos de la v3 (80 tarifas, credenciales de laboratorio) | cargado |
 | `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
 | `sql/oracle/08_pruebas_v3.sql` | Pruebas de la v3: ficha y auditoría de clientes, errores y reportes | parcial |
 | `sql/oracle/09_torneos_tamano_plantilla.sql` | Migración incremental del tamaño de plantilla | disponible |
 
-Para inicializar un esquema v3 vacío, usa los scripts 04 a 06 como usuario `SGCD`. El script 04
-recrea las tablas (borra las `SGCD_*` existentes). El esquema de transición permite levantar la
-demo; el backend final se escribe sobre el [UML oficial de 19 tablas](docs/entrega/MODELO_OBJETIVO.md)
-y el DDL de instalación con nombres definitivos `SGCD_*`, secuencias y triggers.
+Cada DDL borra las tablas `SGCD_*` antes de crearlas: se ejecuta sólo en desarrollo. Los archivos con
+datos en español requieren `NLS_LANG=AMERICAN_AMERICA.AL32UTF8` y `LANG=C.UTF-8` en el `docker exec`
+(ver [`sql/README.md`](sql/README.md)), o los acentos se guardan como caracteres de reemplazo.
 
 ## Convenciones de nombres
 
@@ -88,17 +98,16 @@ documento en el mismo commit.
 
 ## Qué falta
 
-1. **DDL de las 19 tablas** con nombres definitivos `SGCD_*`, PK/FK, restricciones, secuencias y
-   triggers coordinados con Pablo, más los catálogos del recinto único (6 canchas + grande, 3 deportes).
-2. Adaptar los 6 paquetes al modelo objetivo (`USUARIO` en lugar de `CREDENCIALES`, reservas por
-   bloques de una hora con la regla de la cancha grande, tarifa por bloque, inscripción completa).
-3. Integrar los 10 mantenedores de `23-11-26/mi_parte_nuevo/` (faltan modalidades, deportes,
-   canchas, horarios, cancha–modalidad, administradores y torneos).
-4. Los 5 gestores: reservas con precio por bloques consecutivos y sin cruce grande/1-2-3, pago
+1. **Paquetes adaptados al modelo objetivo** (`12_paquetes_sgcd_19.sql`): `AUTH` sobre `USUARIO`,
+   clientes con auditoría JSON, tarifas por bloque, reservas con bloques consecutivos y regla de la
+   cancha grande, torneos con nómina completa y pago único por reserva.
+2. Integrar los 10 mantenedores de `23-11-26/mi_parte_nuevo/` (faltan modalidades, deportes,
+   canchas, horarios, cancha–modalidad, administradores y torneos) con los nombres del modelo.
+3. Los 5 gestores: reservas con precio por bloques consecutivos y sin cruce grande/1-2-3, pago
    único por reserva, inscripción de equipos con nómina y último cupo, programación de torneos sin
    cliente, y definir el quinto.
-5. Exponer los tres reportes de `SGCD_PKG_CONSULTAS` en una página **Reportes**, aplicar permisos
-   de cliente/administrador y adaptar los triggers de auditoría (antes/después al editar, antes al borrar).
-6. `07_datos_operativos.sql` — clientes, reservas, pagos y torneos demo para los dashboards y el video.
-7. Conectar el panel y el portal a Oracle (hoy la mayoría de los flujos usan datos ficticios).
-8. Recuperación de contraseña por preguntas de seguridad.
+4. Exponer los tres reportes de `SGCD_PKG_CONSULTAS` en una página **Reportes**, aplicar permisos
+   de cliente/administrador y adaptar los triggers de auditoría al formato JSON ya instalado.
+5. `07_datos_operativos.sql` — clientes, reservas, pagos y torneos demo para los dashboards y el video.
+6. Conectar el panel y el portal a Oracle (hoy la mayoría de los flujos usan datos ficticios).
+7. Recuperación de contraseña por preguntas de seguridad.
