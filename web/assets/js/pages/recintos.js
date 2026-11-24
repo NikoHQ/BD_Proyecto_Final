@@ -1,10 +1,11 @@
 const siteName = key => siteRecords.find(site => site.key === key)?.name || key;
-const courtAvailable = index => !courtMeta[index]?.deleted &&
+const courtEnabled = index => !courtMeta[index]?.deleted &&
   (courtMeta[index]?.status || 'DISPONIBLE') === 'DISPONIBLE' &&
   siteRecords.some(site => site.key === courts[index]?.[1] && site.status === 'ACTIVO');
+const courtAvailable = index => courtEnabled(index) &&
+  (index !== largeCourt || largeCourtComponents.every(courtEnabled));
 const courtStates = { DISPONIBLE: 'Disponible', MANTENCION: 'Mantención', INACTIVA: 'Inactiva' };
-const courtTypes = ['CANCHA', 'GIMNASIO', 'SALA', 'PISCINA'];
-const courtType = index => courtMeta[index]?.type || ({ 3: 'GIMNASIO', 5: 'SALA' }[index] || 'CANCHA');
+const courtType = index => index === largeCourt ? 'COMPUESTA' : 'CANCHA';
 const courtStatus = index => courtMeta[index]?.status || 'DISPONIBLE';
 
 function facilitiesDefinition(f, action) {
@@ -14,17 +15,17 @@ function facilitiesDefinition(f, action) {
     return [{ id: index, name, key, sport: courtModes(index).join(', '), district: siteName(key), status: courtStatus(index) }];
   });
   return {
-    title: sites ? 'Recintos' : 'Canchas · ' + escapeHtml(siteName(f.site)), placeholder: sites ? 'Recinto, dirección o comuna' : 'Cancha o modalidad',
-    headers: sites ? ['Recinto', 'Comuna', 'Canchas', 'Estado'] : ['Instalación', 'Recinto', 'Modalidad', 'Estado'],
-    rows: items.filter(item => managementSearch(f.query, [item.name, item.district, item.address, item.sport, item.phone]) &&
+    title: sites ? 'Recintos' : 'Canchas · ' + escapeHtml(siteName(f.site)), placeholder: sites ? 'Recinto o dirección' : 'Cancha o modalidad',
+    headers: sites ? ['Recinto', 'Dirección', 'Canchas', 'Estado'] : ['Instalación', 'Recinto', 'Modalidad', 'Estado'],
+    rows: items.filter(item => managementSearch(f.query, [item.name, item.address, item.sport]) &&
       (!f.status || item.status === f.status) && (!f.site || item.key === f.site) && (!f.sport || courtModes(item.id).includes(f.sport))),
     toolbar: sites ? button('manage-oracle', 'Consultar catálogo Oracle', 'btn-outline-secondary btn-sm') +
-      button('manage-new-site', 'Agregar recinto', 'btn-accent') :
+      (siteRecords.length === 0 ? button('manage-new-site', 'Agregar recinto', 'btn-accent') : '') :
       button('manage-sites', '← Todos los recintos') + button('manage-new-court', 'Agregar cancha', 'btn-accent'),
     filters: managementSelect('status', 'Todos los estados', Object.entries(sites ? activeStates : courtStates), f.status) +
       (sites ? '' : managementSelect('sport', 'Todas las modalidades', [...new Set(courts.flatMap((_, i) => courtModes(i)))].map(sport => [sport, sport]), f.sport)),
     name: item => item.name,
-    cells: item => sites ? [item.district, courts.filter((court, i) => court[1] === item.key && !courtMeta[i]?.deleted).length, activeStates[item.status]] :
+    cells: item => sites ? [item.address, courts.filter((court, i) => court[1] === item.key && !courtMeta[i]?.deleted).length, activeStates[item.status]] :
       [siteName(item.key), item.sport, courtStates[item.status]],
     actions: item => [action(sites ? 'courts' : 'rates', item.id, sites ? 'Administrar canchas' : 'Ver tarifas'), action('edit', item.id, 'Editar'),
       action('history', item.id, 'Ver agenda'), action('toggle', item.id,
@@ -34,11 +35,10 @@ function facilitiesDefinition(f, action) {
       const upcoming = allBookings().filter(row => row.date >= localClock()[0] && !['cancelled', 'completed', 'maintenance'].includes(row.status) &&
         (sites ? courts[row.court][1] === item.key : row.court === item.id)).sort(byTime);
       const fields = sites ? [
-        ['Comuna', item.district], ['Dirección', item.address], ['Teléfono', item.phone],
+        ['Dirección', item.address],
         ['Estado', activeStates[item.status]], ...weekdays.map((day, i) => [day,
           siteHours(item, i)?.join('–') || 'Cerrado'])
       ] : [['Recinto', siteName(item.key)], ['Modalidad', item.sport], ['Tipo', courtType(item.id)],
-        ['Superficie', courtMeta[item.id]?.surface ? courtMeta[item.id].surface + ' m²' : ''],
         ['Estado', courtStates[item.status]]];
       return managementDetails('Detalle · ' + escapeHtml(item.name), [...fields, ['Próximas reservas', String(upcoming.length)],
         ['Próximo bloque', upcoming[0] ? upcoming[0].date + ' · ' + upcoming[0].start : '']],
@@ -49,7 +49,7 @@ function facilitiesDefinition(f, action) {
   };
 }
 function modalityChoices() {
-  const catalog = ['Fútbol 5', 'Fútbol 7', 'Pádel dobles', 'Básquetbol 5x5', 'Vóleibol 6x6', 'Entrenamiento funcional'];
+  const catalog = ['Fútbol 6', 'Pádel dobles', 'Tenis'];
   return [...new Set([...catalog, ...courts.flatMap((_, index) => courtModes(index))])]
     .sort((a, b) => a.localeCompare(b, 'es'));
 }
@@ -62,8 +62,7 @@ function editCourt(item = null) {
     escapeHtml(mode) + '</span></label>').join('');
   managementForm(item ? 'Editar instalación' : 'Agregar cancha', 'court', item?.id ?? -1,
     field('name', 'Nombre', item?.name, 'required maxlength="100"') +
-    editSelect('type', 'Tipo', courtTypes.map(type => [type, type]), courtType(item?.id)) +
-    field('surface', 'Superficie (m²)', courtMeta[item?.id]?.surface, 'type="number" min=".01" max="999999.99" step=".01"') +
+    (item?.id === largeCourt ? '<p class="small text-secondary">La cancha grande ocupa las canchas 1, 2 y 3.</p>' : '') +
     '<fieldset class="border rounded p-3 mb-3"><legend class="fs-6 float-none w-auto mb-1">Modalidades admitidas</legend>' +
     '<p class="small text-secondary mb-2">Marca una o más modalidades del catálogo.</p>' + choices + '</fieldset>' +
     editSelect('status', 'Estado', Object.entries(courtStates), item?.status || 'DISPONIBLE'));
@@ -82,7 +81,7 @@ function editSiteHours(site) {
 async function showOracleCatalog() {
   showDialog('Catálogo Oracle', '<p id="oracle-catalog" role="status">Consultando recintos y canchas…</p>');
   try {
-    const response = await fetch('catalogo-oracle.php');
+    const response = await fetch('/dashboardadmin/catalogo-oracle.php');
     if (!response.ok) throw new Error('Oracle no disponible');
     const { recintos, horarios, canchas } = await response.json();
     const container = $('oracle-catalog');
@@ -117,15 +116,19 @@ function bookingWithinHours(court, date, start, end) {
   return Boolean(hours && start >= hours[0] && end <= hours[1]);
 }
 
+function bookingUsesHourlyBlocks(court, date, start, end) {
+  if (!bookingWithinHours(court, date, start, end) || start >= end) return false;
+  const opening = siteHours(siteRecords.find(site => site.key === courts[court][1]), weekdayIndex(date))[0];
+  return (minutes(start) - minutes(opening)) % 60 === 0 && (minutes(end) - minutes(start)) % 60 === 0;
+}
+
 function editSite(item) {
     if (managementState.instalaciones.filters.kind === 'courts') {
     return editCourt(item);
   }
   managementForm(item ? 'Editar recinto' : 'Agregar recinto', 'instalaciones', item?.id ?? 0,
     field('name', 'Nombre', item?.name, 'required maxlength="100"') +
-    field('district', 'Comuna', item?.district, 'required maxlength="80"') +
-    field('address', 'Dirección', item?.address, 'required maxlength="200"') +
-    field('phone', 'Teléfono', item?.phone, 'type="tel" maxlength="20"') +
+    field('address', 'Dirección', item?.address, 'required maxlength="150"') +
     editSelect('status', 'Estado', Object.entries(activeStates), item?.status || 'ACTIVO'));
 }
 
@@ -148,8 +151,8 @@ function saveCourt(id, data, formData, error) {
   const index = court ? id : courts.length;
   const primary = court && modalities.includes(court[2]) ? court[2] : modalities[0];
   modalities.sort((left, right) => (left === primary ? -1 : right === primary ? 1 : 0));
-  courts[index] = [data.name, siteKey, primary, court?.[3] || 0];
-  courtMeta[index] = { type: data.type, status: data.status, surface: data.surface, modalities };
+  courts[index] = [data.name, siteKey, primary, court?.[3] || 0, court?.[4] || 0];
+  courtMeta[index] = { status: data.status, modalities };
   managementState.instalaciones.selected = index;
 }
 
@@ -160,8 +163,8 @@ function saveSiteHours(id, data, error) {
     const closing = data['close' + index];
     return opening || closing ? [opening, closing] : null;
   });
-  const invalid = hours.findIndex(pair => pair && (!validClock(pair[0]) || !validClock(pair[1], true) || pair[0] >= pair[1]));
-  if (invalid !== -1) return error(weekdays[invalid] + ' debe tener una apertura anterior al cierre.');
+  const invalid = hours.findIndex(pair => pair && (!validClock(pair[0]) || !validClock(pair[1], true) || pair[0] >= pair[1] || (minutes(pair[1]) - minutes(pair[0])) % 60 !== 0));
+  if (invalid !== -1) return error(weekdays[invalid] + ' debe tener un horario divisible en bloques completos de una hora.');
   const conflict = allBookings().find(row => {
     if (courts[row.court][1] !== site.key || row.date < localClock()[0] ||
         !['pending', 'confirmed'].includes(row.status)) return false;
@@ -174,11 +177,11 @@ function saveSiteHours(id, data, error) {
 
 function saveSite(id, data, error) {
   const site = siteRecords.find(entry => entry.id === id);
-  if (!data.name || !data.district || !data.address) return error('Completa nombre, dirección y comuna.');
-  if (siteRecords.some(entry => entry.id !== id && normalizeName(entry.name) === normalizeName(data.name) &&
-    normalizeName(entry.district) === normalizeName(data.district))) return error('Ya existe un recinto con ese nombre y comuna.');
+  if (!data.name || !data.address) return error('Completa nombre y dirección.');
+  if (siteRecords.some(entry => entry.id !== id && normalizeName(entry.name) === normalizeName(data.name))) return error('Ya existe un recinto con ese nombre.');
   if (site) Object.assign(site, data);
   else {
+    if (siteRecords.length) return error('La entrega trabaja con un solo recinto.');
     const id = Math.max(0, ...siteRecords.map(entry => entry.id)) + 1;
     siteRecords.push({ ...data, id, key: 'site-' + id, hours: weekdays.map(() => null) });
     managementState.instalaciones.selected = id;

@@ -101,7 +101,7 @@ function requireAccount(): array
         http_response_code(503);
         exit('El acceso no está disponible. Intenta nuevamente.');
     }
-    if (!$account) redirectTo('login.php');
+    if (!$account) redirectTo('/dashboardadmin/login.php');
     return $account;
 }
 

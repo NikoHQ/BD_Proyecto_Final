@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 authStart();
 $account = requireAccount();
 $view = $_GET['vista'] ?? 'perfil';
@@ -22,13 +22,6 @@ function accountName(): string
     return $name;
 }
 
-function staffRole(): string
-{
-    $role = post('role');
-    if (!in_array($role, ['ADMINISTRADOR', 'OPERADOR'], true)) throw new DomainException('Selecciona un rol válido.');
-    return $role;
-}
-
 function saveAccountProfile(array $account): void
 {
     authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
@@ -48,7 +41,6 @@ function saveStaff(array $account, string $action): void
     rateLimit('staff-confirm', $actor['USUARIO']);
     currentPasswordMatches($actor);
     $name = accountName();
-    $role = staffRole();
     if ($action === 'create-staff') {
         $login = checkedLogin();
         $hash = newPasswordHash();
@@ -59,7 +51,7 @@ function saveStaff(array $account, string $action): void
                       INSERT INTO SGCD_ADMINISTRADORES (NOMBRE_ADMINISTRADOR)
                         VALUES (:name) RETURNING ID_ADMINISTRADOR INTO staff_id;
                       SGCD_PKG_AUTH.crear_credencial(:login, :hash, :role, NULL, staff_id, credential_id);
-                   END;', ['name' => $name, 'login' => $login, 'hash' => $hash, 'role' => $role]);
+                   END;', ['name' => $name, 'login' => $login, 'hash' => $hash, 'role' => 'ADMINISTRADOR']);
     } else {
         $target = accountBy('id', (int) post('id'), true);
         if (!$target || $target['ID'] === $actor['ID']) throw new DomainException('Edita tus datos desde Mi perfil.');
@@ -67,8 +59,8 @@ function saveStaff(array $account, string $action): void
         if (!in_array($status, ['ACTIVA', 'BLOQUEADA', 'INACTIVA'], true)) throw new DomainException('Selecciona un estado válido.');
         authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
             ['name' => $name, 'id' => $target['PERSONAL']]);
-        authQuery('UPDATE SGCD_CREDENCIALES SET ROL_CREDENCIAL = :role, ESTADO_CREDENCIAL = :status WHERE ID_CREDENCIAL = :id',
-            ['role' => $role, 'status' => $status, 'id' => $target['ID']]);
+        authQuery('UPDATE SGCD_CREDENCIALES SET ESTADO_CREDENCIAL = :status WHERE ID_CREDENCIAL = :id',
+            ['status' => $status, 'id' => $target['ID']]);
         if (post('password') !== '' || post('confirm') !== '') {
             $hash = newPasswordHash();
             authQuery('UPDATE SGCD_CREDENCIALES SET CLAVE_HASH_CREDENCIAL = :hash WHERE ID_CREDENCIAL = :id',
@@ -149,18 +141,18 @@ function roleName(string $role): string
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Configuración de cuenta · SGCD</title>
-  <?php require __DIR__ . '/includes/styles.php'; ?>
+  <?php require __DIR__ . '/../includes/styles.php'; ?>
 </head>
 <body>
 <main class="container py-4 account-workspace">
   <header class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div><a href="./">← Volver al panel</a><h1 class="mt-2">Configuración de cuenta</h1></div>
-    <form method="post" action="logout.php"><?= csrfField() ?><button class="btn btn-outline-secondary">Cerrar sesión</button></form>
+    <form method="post" action="/dashboardadmin/logout.php"><?= csrfField() ?><button class="btn btn-outline-secondary">Cerrar sesión</button></form>
   </header>
   <nav class="nav nav-tabs mb-3" aria-label="Cuenta">
     <?php foreach (['perfil' => 'Mi perfil', 'seguridad' => 'Seguridad', 'usuarios' => 'Usuarios del personal'] as $key => $label): ?>
       <?php if ($key === 'usuarios' && $account['ROL'] !== 'ADMINISTRADOR') continue; ?>
-      <a class="nav-link<?= $view === $key ? ' active' : '' ?>" href="account.php?vista=<?= $key ?>"<?= $view === $key ? ' aria-current="page"' : '' ?>><?= $label ?></a>
+      <a class="nav-link<?= $view === $key ? ' active' : '' ?>" href="/dashboardadmin/account.php?vista=<?= $key ?>"<?= $view === $key ? ' aria-current="page"' : '' ?>><?= $label ?></a>
     <?php endforeach; ?>
   </nav>
   <?php if ($error): ?><p class="alert alert-danger" role="alert"><?= esc($error) ?></p><?php endif; ?>
@@ -223,10 +215,6 @@ function roleName(string $role): string
           <?php else: ?>
             <label class="form-label w-100">Usuario<input class="form-control" name="login" maxlength="50" autocomplete="off" required></label>
           <?php endif; ?>
-          <label class="form-label w-100">Rol<select class="form-select" name="role">
-            <option value="OPERADOR">Operador</option>
-            <option value="ADMINISTRADOR"<?= ($target['ROL'] ?? '') === 'ADMINISTRADOR' ? ' selected' : '' ?>>Administrador</option>
-          </select></label>
           <?php if ($target): ?>
             <p class="form-text">Para restablecer la contraseña del usuario, rellena ambos campos.</p>
             <?= str_replace(' required', '', passwordFields()) ?>

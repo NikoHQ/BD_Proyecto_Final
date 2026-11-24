@@ -2,14 +2,13 @@ const clientActive = client => client.status !== 'INACTIVO';
 const clientBookings = client => normalRows().filter(row => clientForReservation(row)?.id === client.id);
 function clientsDefinition(f, action) {
   return {
-    title: 'Clientes', placeholder: 'Nombre, RUT, teléfono o correo', headers: ['Cliente', 'RUT', 'Tipo', 'Estado'],
+    title: 'Clientes', placeholder: 'Nombre, RUT, teléfono o correo', headers: ['Cliente', 'RUT', 'Correo', 'Estado'],
     rows: demoClients.filter(client => managementSearch(f.query, [client.name, client.email, client.phone], client.rut) &&
-      (!f.type || (client.type || 'Persona') === f.type) && (!f.status || (client.status || 'ACTIVO') === f.status)),
-    filters: managementSelect('type', 'Todos los tipos', ['Persona', 'Organización'].map(type => [type, type]), f.type) +
-      managementSelect('status', 'Todos los estados', Object.entries(activeStates), f.status),
+      (!f.status || (client.status || 'ACTIVO') === f.status)),
+    filters: managementSelect('status', 'Todos los estados', Object.entries(activeStates), f.status),
     toolbar: button('manage-new', 'Nuevo cliente', 'btn-accent'),
     name: client => client.name,
-    cells: client => [client.rut, client.type || 'Persona', activeStates[client.status || 'ACTIVO']],
+    cells: client => [client.rut, client.email || '—', activeStates[client.status || 'ACTIVO']],
     actions: client => [action('edit', client.id, 'Editar'),
       action('history', client.id, 'Ver reservas'), action('toggle', client.id, clientActive(client) ? 'Desactivar' : 'Activar'),
       action('ask-delete', client.id, 'Eliminar de la maqueta', true)],
@@ -28,7 +27,6 @@ function editClient(item) {
     field('rut', 'RUT con DV', client.rut, 'required maxlength="12"') +
     field('phone', 'Teléfono', client.phone, 'type="tel" maxlength="20"') +
     field('email', 'Correo', client.email, 'type="email" maxlength="150"') +
-    editSelect('type', 'Tipo (demo)', [['Persona', 'Persona'], ['Organización', 'Organización']], client.type || 'Persona') +
     editSelect('status', 'Estado', Object.entries(activeStates), client.status || 'ACTIVO'));
 }
 

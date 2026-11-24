@@ -119,7 +119,7 @@ function hasManagedDependencies(page, item, isCourt) {
   if (page === 'clientes') return clientBookings(item).length > 0 ||
     tournaments.some(tournament => tournament.roster.some(team => team.captainId === item.id ||
       team.players.some(player => player.rut === item.rut)));
-  if (isCourt) return allBookings().some(row => row.court === item.id) || demoTariffs.some(rate => rate.court === item.id);
+  if (isCourt) return item.id === largeCourt || largeCourtComponents.includes(item.id) || allBookings().some(row => row.court === item.id) || demoTariffs.some(rate => rate.court === item.id);
   return courts.some((court, index) => court[1] === item.key && !courtMeta[index]?.deleted) ||
     tournaments.some(tournament => tournament.site === item.key);
 }

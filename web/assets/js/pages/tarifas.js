@@ -4,15 +4,14 @@ function automaticQuote(court, mode, date, start, end) {
     rate.from <= date && (!rate.until || date <= rate.until));
   const startMinute = minutes(start);
   const endMinute = minutes(end);
-  const cuts = [...new Set([startMinute, endMinute, ...bands.flatMap(rate =>
-    [minutes(rate.start), minutes(rate.end)].filter(cut => cut > startMinute && cut < endMinute))])].sort((a, b) => a - b);
+  if (endMinute <= startMinute || (endMinute - startMinute) % 60 !== 0) return null;
   let total = 0;
   const ids = new Set();
-  for (let i = 0; i < cuts.length - 1; i++) {
-    const band = bands.find(rate => minutes(rate.start) <= cuts[i] && minutes(rate.end) >= cuts[i + 1]);
+  for (let block = startMinute; block < endMinute; block += 60) {
+    const band = bands.find(rate => minutes(rate.start) <= block && minutes(rate.end) >= block + 60);
     if (!band) return null;
     ids.add(band.id);
-    total += band.rate * (cuts[i + 1] - cuts[i]) / 60;
+    total += band.rate;
   }
   return { amount: Math.round(total), tariffIds: [...ids], priceMode: 'automatic' };
 }
@@ -77,6 +76,12 @@ function saveTariff(id, data, error) {
   const rate = { ...data, id: id || nextTariffId, court: Number(data.court), day: Number(data.day), rate: Number(data.rate) };
   if (!validClock(rate.start) || !validClock(rate.end, true)) return error('Escribe las horas en formato HH:MM.');
   if (rate.start >= rate.end) return error('La hora de término debe ser posterior al inicio. Para medianoche escribe 24:00.');
+  const site = siteRecords.find(site => site.key === courts[rate.court]?.[1]);
+  const hours = siteHours(site, rate.day);
+  if (!hours || rate.start < hours[0] || rate.end > hours[1] || (minutes(rate.start) - minutes(hours[0])) % 60 !== 0 ||
+      (minutes(rate.end) - minutes(rate.start)) % 60 !== 0) {
+    return error('La tarifa debe cubrir bloques completos de una hora dentro del horario del recinto.');
+  }
   if (rate.until && rate.until < rate.from) return error('La fecha de término de vigencia debe ser igual o posterior a la fecha de inicio.');
   if (!courtModes(rate.court).includes(rate.mode)) return error('Selecciona una modalidad admitida por la cancha.');
   if (tariffConflict(rate)) return error('La franja se cruza con otra tarifa activa. Si quieres cambiar el precio desde cierta hora, usa Dividir franja en la tarifa existente.');
@@ -104,8 +109,8 @@ function saveTariffSplit(id, data, error) {
   if (!rate) return error('La tarifa ya no está disponible.');
   const value = Number(data.rate);
   if (!validClock(data.splitAt) ||
-      data.splitAt <= rate.start || data.splitAt >= rate.end) {
-    return error('Elige una hora entre ' + rate.start + ' y ' + rate.end + '.');
+      data.splitAt <= rate.start || data.splitAt >= rate.end || (minutes(data.splitAt) - minutes(rate.start)) % 60 !== 0) {
+    return error('Elige un límite de bloque de una hora entre ' + rate.start + ' y ' + rate.end + '.');
   }
   if (!Number.isSafeInteger(value) || value < 1 || value > 999999999) return error('Ingresa un precio por hora válido.');
   const first = { ...rate, end: data.splitAt };

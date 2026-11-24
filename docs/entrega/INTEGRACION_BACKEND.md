@@ -1,52 +1,66 @@
-# Guía para el agente de integración de backend de SGCD
+# Guía de integración de SGCD para el equipo y sus agentes de IA
 
-## Punto de partida
+**El modelo oficial es el [UML del equipo](../modelo/uml-equipo-19/UML_objetivo.mdj), vista 03 Tercera forma normal, con 19 tablas.** El [PlantUML](../modelo/uml-equipo-19/SGCD_objetivo.puml) permite revisar el mismo modelo como texto. Ambos son copias de referencia. Mantenerlos intactos y adaptar el DDL, las consultas, los paquetes, los DTO y el frontend existente a ese contrato. El [mapa de las 19 tablas](MODELO_OBJETIVO.md) explica la equivalencia con v3.
 
-Integra el panel existente de PHP, AdminLTE, Bootstrap y JavaScript con Oracle v3. Lee primero el DDL y las especificaciones de los paquetes en [04_ddl_v3.sql](../../sql/oracle/04_ddl_v3.sql) y [05_paquetes_plsql.sql](../../sql/oracle/05_paquetes_plsql.sql). Contrasta los procedimientos existentes antes de diseñar endpoints o añadir columnas. Los catálogos y las credenciales iniciales están en [06_catalogos_v3.sql](../../sql/oracle/06_catalogos_v3.sql).
+El [DDL v3](../../sql/oracle/04_ddl_v3.sql) crea 16 tablas y todavía sirve al acceso de personal y a la consulta de catálogos de la demo. Sus nombres, columnas, roles y reglas anteriores son referencias de transición. Preparar la base objetivo en un esquema de pruebas separado. El script 04 reconstruye las tablas y se usa para inicializar una base vacía de la demostración.
 
-Mantén la navegación, formularios, estados visibles y acciones del panel. Implementa por flujo y sustituye cada lectura y escritura ficticia por una operación real en PHP. Todos los controles del navegador sirven para dar respuesta inmediata. PHP debe aplicar permisos y reglas de negocio con las garantías transaccionales de Oracle.
+## Qué leer y en qué orden
 
-## Dónde trabajar
-
-| Archivo o carpeta | Responsabilidad |
+| Archivo | Qué resuelve |
 | --- | --- |
-| `web/index.php` | Entrada autenticada del panel y orden de carga de scripts. |
-| `web/login.php`, `web/logout.php`, `web/account.php`, `web/includes/auth.php` | Sesión de personal, perfil, contraseña y gestión de usuarios ya conectados a Oracle. La recuperación por preguntas queda pendiente. |
-| `web/catalogo-oracle.php` | Ejemplo autenticado de consulta real del catálogo. Sólo lectura. |
-| `web/assets/js/app.js` | Navegación, rutas, montaje de vistas y delegación de eventos. |
-| `web/assets/js/pages/` | Agenda, reservas, clientes, pagos, recintos, tarifas y torneos, un archivo por página. |
-| `web/assets/js/shared/` | Formateadores, componentes, listas y buscador global. |
-| `web/assets/js/demo/fixtures.js`, `web/assets/js/demo/store.js` | Datos ficticios, carga inicial y persistencia local. Son el primer punto para localizar el origen de los datos de demo. |
-| `web/assets/css/` | Estilos base, cuenta, agenda, listados y torneos. |
+| [MODELO_OBJETIVO.md](MODELO_OBJETIVO.md) | Nombres, claves, cardinalidades y mapeo de las 19 tablas; criterios para adaptar SQL y datos previos. |
+| [RESERVAS_ORACLE.md](RESERVAS_ORACLE.md) | Catálogo, disponibilidad, cotización, cancha grande, calendario compartido, confirmación y pago. |
+| [TORNEOS_ORACLE.md](TORNEOS_ORACLE.md) | Programación, inscripción, propietario, RUT de integrantes, cupos, máximo del equipo y concurrencia. |
+| [ACCESO_DEMO.md](ACCESO_DEMO.md) y [PORTAL_CLIENTE.md](PORTAL_CLIENTE.md) | Inicio local, credenciales de desarrollo y recorridos reproducibles en ambos paneles. |
 
-Los scripts del panel son clásicos con `defer`, sin compilación. Conserva el orden definido en `index.php` si se añaden archivos. `app.js` monta el panel luego de cargar las páginas. Las páginas también contienen mutaciones y validaciones simuladas. Quitar el almacenamiento local por sí solo deja esos flujos incompletos.
+Los documentos históricos de diseño y los planes describen etapas previas. Ante una discrepancia, aplicar primero el UML y las decisiones de negocio descritas aquí. Si un dato de la interfaz falta en el UML, intentar obtenerlo de relaciones existentes, derivarlo en un DTO o simplificar la pantalla. Llevar al equipo cualquier caso que requiera cambiar el modelo antes de introducir objetos persistentes.
 
-## Inventario de la maqueta
+## Entradas y ubicación del código
 
-| Flujo | Comportamiento local que hay que reemplazar | Integración |
+- `/` sirve el portal PHP y Bootstrap. `web/cliente/index.php` define rutas, sesión y CSRF. `http.php` contiene los helpers. `reservas.php` y `torneos.php` gestionan acciones, y `vistas/` contiene el HTML.
+- `/dashboardadmin/` sirve el panel PHP y AdminLTE. `web/dashboardadmin/index.php` define el orden de carga de scripts clásicos con `defer`. `web/assets/js/app.js` monta las rutas por hash. Las pantallas están en `web/assets/js/pages/` y comparten filtros, formularios y componentes en `shared/`.
+- `web/includes/auth.php`, `web/dashboardadmin/login.php` y `account.php` usan OCI8 y el esquema v3 del personal. `catalogo-oracle.php` es una consulta autenticada de sólo lectura a ese mismo esquema.
+- `web/cliente/demo.php`, `web/includes/portal-inbox.php` y `tournament-store.php` permiten verificar los flujos antes de conectar el modelo objetivo. `web/assets/js/demo/` contiene las semillas y adaptadores del panel.
+
+## Superficies y fuente real que debe reemplazar la demo
+
+| Módulo | Frontend y fuente actual | Adaptación con el UML |
 | --- | --- | --- |
-| Agenda | Reservas y bloques de torneo generados localmente, conflictos y métricas en memoria, vencimientos simulados y selector de fecha. | Consultar datos por fecha, recinto y cancha con una proyección común de bloques. Oracle debe decidir disponibilidad, expiración y solapes. Evitar doble reserva concurrente. |
-| Reservas | IDs incrementales, clientes y canchas de demo, cancelación, confirmación, edición, borrado local y cotización en navegador. | Usar `SGCD_PKG_RESERVAS` donde corresponda. Completar edición y estados faltantes. Conservar historial y sustituir el borrado de demo por una operación de negocio trazable. |
-| Clientes | Fichas ficticias, altas desde reserva y capitán, normalización local y clasificación Persona/Organización. | Usar `SGCD_CLIENTES` y `SGCD_PKG_CLIENTES`. Normalizar RUT y validar unicidad. Confirmar si la clasificación de la maqueta tiene respaldo en el modelo. Ficha y cuenta son entidades distintas. |
-| Pagos | Movimientos anidados en reservas, estados y saldos derivados, corrección y anulación local. | Integrar `SGCD_PAGOS`, asegurando un único origen válido entre reserva, membresía e implementos. Validar `ADMINISTRADOR` en PHP para editar o anular. Diseñar auditoría e idempotencia y recalcular saldos en transacción. |
-| Recintos y canchas | Índices de arrays como claves, horarios semanales y modalidades locales, dependencias simuladas. | Usar identificadores reales, `SGCD_RECINTOS`, `SGCD_CANCHAS`, `SGCD_HORARIOS`, `SGCD_DEPORTES`, `SGCD_MODALIDADES` y sus compatibilidades. Validar cambios contra reservas y torneos. |
-| Tarifas | Franjas ficticias, división local de bandas y cálculo por minutos con opción de total manual más motivo. | Cotizar y persistir en PHP/Oracle. Confirmar política de vigencia, franja y redondeo. El paquete actual consulta la franja inicial y guarda el valor por hora sin multiplicar por duración. Resolver las reservas que cruzan franjas y el término a `24:00`. Registrar responsable y motivo de ajustes manuales. |
-| Torneos | Planteles precargados, cupos calculados en memoria, altas y ediciones de equipos, bloques y transiciones locales. | Usar `SGCD_PKG_TORNEOS` donde corresponda. Integrar torneos, equipos, jugadores y composición de planteles. Validar capitán, cupos, RUT duplicados y tamaño del equipo. Guardar inscripción y edición como transacciones completas. |
-| Buscador | Filtra los arrays locales por nombre, RUT, correo, ID y cancha. | Crear búsqueda con permisos, resultados acotados por tipo, filtros parametrizados e IDs reales. |
-| Cuenta y recuperación | Login, logout y gestión de personal ya conectados a la sesión y a Oracle. **Olvidé mi contraseña** y el apartado de preguntas son pantallas informativas. | Diseñar recuperación mediante preguntas de seguridad sin correo. Definir persistencia, alta autenticada de respuestas, hashes, límite de intentos, errores sin enumeración y revocación de sesiones tras el cambio de clave. La entrega carece de migración de recuperación. |
-| Módulos aún sin pantalla | Membresías, puntos e implementos/inventario. | Programar su integración de forma separada. Revisar sus vínculos con pagos e historial. |
+| Recintos, horario y canchas | `pages/recintos.js`, `demo/store.js`; catálogo local y consulta v3 aparte. | Servir el recinto y sus horarios desde `RECINTO`, `HORARIO` y `BLOQUE_HORARIO`. Editar la grilla semanal en la misma operación que su ventana. Consultar deportes, modalidades, compatibilidades y composición con `DEPORTE`, `MODALIDAD`, `CANCHA`, `CANCHA_MODALIDAD` y `CANCHA_COMPONENTE`. La demo contiene un recinto, seis canchas de Fútbol 6 y la grande. Los datos de tenis y pádel son muestras provisionales. |
+| Tarifas | `pages/tarifas.js`; catálogo y vista previa locales. | Usar `TARIFA` por cancha, modalidad, día, franja y vigencia. Aceptar cambios de precio dentro de un día en límites de bloque. Validar que cada bloque cotizado tenga una tarifa aplicable y devolver el importe por hora. El total histórico sale de `RESERVA.IMPORTE_ACORDADO`. |
+| Portal de reservas | `cliente/reservas.php` y `cliente/demo.php`; cuenta y recibo de sesión, solicitudes web en una bandeja temporal. | Alimentar la misma búsqueda, revisión y comprobante con los IDs reales. Cada selección es uno o más bloques consecutivos de una hora, guardados como una sola `RESERVA`. El cliente autenticado puede solicitar más de un horario libre. Cada solicitud web se confirma por separado. |
+| Agenda, Reservas y solicitudes web | `pages/agenda.js`, `pages/reservas.js`, `solicitudes-web.php`; mostrador local, bandeja web y torneos en fuentes temporales distintas. | Devolver una proyección de la misma tabla `RESERVA` para todo origen y para torneos. Aplicar en backend los cruces de la grande con 1–3 y la confirmación de administrador. Usar `ID_TORNEO` para los bloques de evento. Reemplazar borrados de maqueta por cancelación o por la operación acordada. Mostrar estado real y actualizar listas después de mutar. |
+| Clientes y auditoría | `pages/clientes.js` y buscadores en reserva/torneo; fichas locales. | Consultar y editar `CLIENTE`, con RUT normalizado y ficha presencial sin cuenta. Aplicar auditoría transaccional en `AUDITORIA_CLIENTE` de altas, cambios y bajas definidas por backend. La columna histórica de cliente permite conservar eventos de una ficha que se retire. La auditoría se genera en Oracle, con datos de ficha y actor cuando exista. |
+| Pagos | `pages/pagos.js`; registro manual simulado. | Una reserva admite cero o un `PAGO`. Usar fecha, importe, medio y estado; validar permisos e importe. Editar o anular la misma fila. La confirmación de la reserva es independiente del pago. |
+| Torneos y equipos | `pages/torneos.js`, `cliente/torneos.php`, `tournaments-data.php`; snapshot PHP compartido. | Leer `TORNEO` y bloques en `RESERVA`. Crear equipo, jugador y plantilla con `INSCRIPCION_TORNEO`, `JUGADOR` y `EQUIPO_JUGADOR`. La inscripción completa consume un cupo. Cada jugador actual tiene nombre y RUT. La cantidad incluye al capitán y respeta el máximo vigente del torneo. Sustituir la escritura de todo el snapshot por operaciones por ID. |
+| Sesión, registro y perfil | `cliente/index.php`, `includes/auth.php` y `dashboardadmin/account.php`; login real de personal v3 y cliente de demo. | Autenticar en `USUARIO` y resolver el mismo perfil activo por `CLIENTE.ID_USUARIO` o `ADMINISTRADOR.ID_USUARIO`. El alta web habilita sesionar, consultar reservas propias e inscribirse. Los administradores tienen el mismo perfil de autorización en el objetivo; el operador de v3 es de transición. |
+| Recuperación de cuenta | Panel de personal con aviso informativo. | Acordar la recuperación por preguntas como entrega separada. El UML oficial carece de campos de preguntas o respuestas. Mantener el flujo informativo mientras esa decisión siga pendiente. |
+| Buscador y métricas | `shared/search.js` y vistas de listados; consultas locales. | Usar permisos y límites del servidor. Buscar por ID, RUT, nombre y cancha según el módulo. Calcular totales a partir de la consulta filtrada, con APIs de lista y detalle. La interfaz recibe los resultados del alcance autorizado. |
 
-Las claves de almacenamiento local son `sgcd-reservas-demo-v1`, `sgcd-demo-last-reservation`, `sgcd-catalogos-demo-v1` y `sgcd-torneos-demo-v1`. Los datos en esas claves son ficticios. En el modo conectado, carga el estado desde el servidor y retira el indicador **Modo demostración** cuando la pantalla ya no use esa fuente.
+## Contratos comunes para PHP y la interfaz
 
-Si trabajas con el volumen local donde se probó la recuperación anterior, podría existir una tabla `SGCD_RECUPERACION` residual. El panel entregado no la consulta. Revisa su existencia antes de nombrar la migración definitiva.
+- Transportar IDs de Oracle como identificadores estables. Los índices de arrays, los alias de canchas, los RUT ficticios y los códigos de ejemplo existen sólo en la demo. Los códigos de presentación pueden derivarse del ID.
+- Las listas consumen filtros explícitos y devuelven elementos, total, página y tamaño. Usar orden estable e imponer un máximo por consulta. En detalle devolver los campos visibles y acciones permitidas según estado y actor. El selector de fichas por nombre/RUT tiene un resultado acotado.
+- Las mutaciones comprueban sesión, rol o propiedad y CSRF en PHP. Obtener usuario, cliente y administrador de la sesión. Usar binds, una conexión Oracle por transacción y rollback si falla un paso. Los controles JavaScript permiten revisar el formulario antes de enviarlo.
+- Preservar fecha local, formato de 24 horas y moneda CLP en los DTO. Validar los estados de catálogo y de negocio contra el DDL definitivo. Mapear errores a códigos y mensajes accionables, con respuesta uniforme para un recurso privado inexistente o ajeno. Devolver datos actualizados tras guardar para evitar reconstituir el resultado en el navegador.
+- El traslado requiere sustituir `sgcd-reservas-demo-v2` y `sgcd-catalogos-demo-v2` de localStorage, los torneos y las solicitudes temporales de PHP, y las cuentas de cliente en sesión de demostración. La clave `sgcd-torneos-demo-v1` permite recuperar una copia de prueba anterior. Conservar preferencias de presentación locales si siguen siendo útiles. Poblar la base objetivo desde las fuentes autorizadas del equipo.
+- La demo verifica conflictos entre solicitudes web bajo su propio bloqueo y lee la programación de torneos disponible. Los cambios del catálogo y las reservas de mostrador viven en el navegador. La consistencia concurrente entre mostrador, web y torneo forma parte de la integración Oracle.
 
-## Orden recomendado y criterios de aceptación
+## Orden para conectar y criterio de cierre
 
-1. Conserva la sesión PHP y los roles de Oracle como referencia de autorización. Responde con errores consistentes para sesión vencida, permiso, validación y conflicto. Las mutaciones deben comprobar sesión, autorización y CSRF del lado servidor.
-2. Integra catálogos, clientes y tarifas. Usa IDs de Oracle en selects y DTOs. Para listas devuelve elementos, total, página y tamaño. Deja que el servidor normalice y aplique búsqueda y filtros.
-3. Integra reserva, agenda y pagos como un conjunto. La cotización de pantalla puede ser previa. La respuesta de la operación debe devolver precio y estado confirmados. Prueba dos reservas simultáneas para la misma cancha, cambios con abonos registrados y rechazo de pagos fuera de saldo.
-4. Integra torneos. Prueba que su bloqueo de cancha se vea en Agenda, que un RUT no se pueda inscribir dos veces y que editar un equipo no consuma otro cupo.
-5. Conecta recuperación por preguntas. Verifica configuración, intentos fallidos, cambio de contraseña e invalidación de sesiones. Completa los módulos fuera de la demo según el orden acordado por el equipo.
-6. Valida una instalación limpia con una base de desarrollo, un administrador y un operador. Comprueba que las altas y cambios se vean en otra sesión y que un operador no pueda editar pagos invocando el endpoint directamente.
+1. **Modelo y sesión.** Verificar las 19 tablas y sus claves. Adaptar login, alta y perfil con las FK de `USUARIO`. Comprobar cierre de sesión, permisos y propiedad con dos cuentas distintas.
+2. **Catálogos y fichas.** Entregar IDs y compatibilidades. Validar bloques editables, la grande y las canchas 1–3, franjas, buscadores y auditoría de clientes.
+3. **Calendario y caja.** Usar una consulta común para agenda/reservas; probar una hora, varias consecutivas y solapes simultáneos de la cancha grande. Confirmar cada reserva web por separado. Verificar un pago por reserva y la conservación del precio pactado.
+4. **Torneos.** Integrar creación, programación, inscripción y administración del plantel. Probar registro de 1 al máximo, duplicados por RUT, cupos en dos sesiones, vínculo opcional de jugador con cliente y retiro sin borrar historial.
+5. **Prueba integral.** Repetir los recorridos en ambas interfaces, desde diferentes sesiones y tras recargar. Retirar el aviso de demo por módulo cuando lecturas y escrituras usen el backend real. Revisar logs y discrepancias de Oracle antes de cerrar la integración.
 
-Consulta también los flujos de [reservas](../diseno/flujo-administracion-reservas.md), [torneos](../diseno/flujo-administracion-torneos.md) y [catálogos y pagos](../diseno/flujo-catalogos-y-pagos.md).
+Pruebas PHP de la maqueta desde la raíz del repositorio.
+
+```sh
+php tests/portal-cliente.php
+php tests/torneos-cliente.php
+```
+
+## Encargo para el agente de backend
+
+> Usa `docs/modelo/uml-equipo-19/UML_objetivo.mdj`, vista 03 Tercera forma normal, como fuente de verdad de las 19 tablas. Conserva el UML. Lee este documento y el mapa `MODELO_OBJETIVO.md`. Compara el DDL y PL/SQL actuales con el modelo y prepara sus cambios en un esquema aislado. Sustituye las fuentes de demostración por operaciones PHP/Oracle siguiendo los contratos de reservas y torneos. Si la interfaz necesita un dato que no está modelado, mapea las relaciones, derívalo o adapta la pantalla. Entrega los cambios con pruebas de ambos paneles, autorización, concurrencia y trazabilidad.
