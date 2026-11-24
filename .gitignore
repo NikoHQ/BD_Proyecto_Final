@@ -11,3 +11,9 @@
 /.agents/
 skills-lock.json
 .env
+
+# Material recibido del ramo y del equipo: se conserva en disco y por Syncthing,
+# pero no se versiona (PDF, PPTX y UML ajenos que solo engordan el repositorio).
+/23-11-26/
+/material/
+/docs/recibido/

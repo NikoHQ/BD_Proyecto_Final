@@ -903,3 +903,17 @@ reportes y torneos desplegadas en `/srv/http` y probadas por HTTP. El panel y el
 leyendo datos de demostración.
 
 **Retomar por:** agenda del panel → Reportes → pagos → torneos → portal con login real.
+
+---
+
+## 2026-11-24 (10) — Material recibido fuera del repositorio
+
+**Contexto.** El repositorio arrastraba PDF, PPTX y UML de terceros que solo ocupan espacio.
+Se dejan de versionar sin borrarlos del disco ni de Syncthing.
+
+**Cambios.** `.gitignore` ignora `/23-11-26/`, `/material/` y `/docs/recibido/`; `git rm --cached`
+los saca del índice (57 archivos). El enlace del `README` al UML pasa a la copia versionada en
+`docs/modelo/uml-equipo-19/`.
+
+**Nota.** El tamaño de `.git` no baja por esto: los objetos siguen en la historia. Solo evita que
+crezca y limpia el listado del repositorio; reescribir la historia para adelgazarla no se hizo.

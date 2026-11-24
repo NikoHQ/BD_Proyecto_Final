@@ -5,7 +5,7 @@ en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administració
 **Entrega:** 2026-11-27.
 
 **Estado hoy (2026-11-24):** el equipo cerró el **UML objetivo de 19 tablas**
-([fuente](23-11-26/UML_objetivo_19_tablas.mdj) y [mapa de integración](docs/entrega/MODELO_OBJETIVO.md)).
+([UML](docs/modelo/uml-equipo-19/UML_objetivo.mdj) y [mapa de integración](docs/entrega/MODELO_OBJETIVO.md)).
 Ya están el **DDL de instalación de las 19 tablas**, los **catálogos del recinto único** y **los 7
 paquetes** del modelo (`10` a `14` de `sql/oracle/`), compilados y con **233 comprobaciones en
 verde** en un esquema limpio, más **17 comprobaciones de concurrencia** con dos sesiones reales
@@ -29,13 +29,13 @@ disponibles en modo demostración; el acceso de personal y la consulta de catál
 | `sql/sqlite/` | Prototipo viejo en SQLite (referencia histórica, no se ejecuta en la entrega) |
 | `docs/diseno/` | El diseño vigente: decisiones, esquema, paquetes, pruebas |
 | `docs/modelo/` | Glosario de tablas, modelo UML y análisis del modelo recibido |
-| `docs/recibido/` | Material que nos pasaron terceros, tal cual llegó |
+| `docs/recibido/` | Material de terceros, tal cual llegó (local, no se versiona) |
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
-| `material/` | Enunciados del ramo, plantillas y documentos de entrega |
+| `material/` | Enunciados y plantillas del ramo (local, no se versiona) |
 | `infra/` | Instalación del servidor (Apache, PHP, Oracle) e inventario de lo instalado |
 | `web/` | Portal PHP, panel administrativo, JavaScript por página y adaptadores de demostración |
 | `tests/` | Pruebas de los flujos del portal (PHP embebido) |
-| `23-11-26/` | Entrega del equipo del 23-11: UML de 19 tablas, DDL de Pablo y aportes PL/SQL |
+| `23-11-26/` | Entrega del equipo del 23-11 (local, no se versiona; el UML vigente está en `docs/modelo/`) |
 | `CODEGO/` | Bitácora y reportes fechados del avance |
 
 ## La base, en orden
