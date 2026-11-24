@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 authStart();
-$account = requireAccount();
+$account = requireStaff();
 preg_match_all('/(?:^|\s)(\p{L})/u', $account['NOMBRE'], $initials);
 $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
 ?>

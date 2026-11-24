@@ -36,11 +36,7 @@ function apiRut(array $entrada): array
     if ($crudo === '' && isset($entrada['rut_numero'], $entrada['dv'])) {
         $crudo = (string) $entrada['rut_numero'] . '-' . (string) $entrada['dv'];
     }
-    $compacto = strtoupper((string) preg_replace('/[.\s-]/', '', trim($crudo)));
-    if (!preg_match('/^([1-9]\d{0,7})([0-9K])$/', $compacto, $partes)) {
-        apiFail('Escribe el RUT completo, con su digito verificador.', 400);
-    }
-    return [(int) $partes[1], $partes[2]];
+    return apiRutPartes($crudo);
 }
 
 function apiId(array $entrada): int

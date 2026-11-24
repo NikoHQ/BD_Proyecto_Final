@@ -101,16 +101,14 @@ documento en el mismo commit.
 
 ## Qué falta
 
-1. **Conectar la web a los paquetes** (fase 4): endpoints con sesión, perfil y CSRF, y reemplazar
-   `demo/store.js`, `demo/fixtures.js`, `demo/tournaments.js` y `cliente/demo.php` por `fetch` a los
-   paquetes. La fase 3 quedó cerrada con 7 paquetes, 9 mantenedores, 233 pruebas de contrato y la
-   batería de concurrencia.
-2. Conectar la web a esos paquetes (hoy todo sigue en la v3 y en la demo).
-3. Los 5 gestores: reservas con precio por bloques consecutivos y sin cruce grande/1-2-3, pago
-   único por reserva, inscripción de equipos con nómina y último cupo, programación de torneos sin
-   cliente, y definir el quinto.
-4. Exponer los tres reportes de `SGCD_PKG_CONSULTAS` en una página **Reportes**, aplicar permisos
-   de cliente/administrador y adaptar los triggers de auditoría al formato JSON ya instalado.
-5. `07_datos_operativos.sql` — clientes, reservas, pagos y torneos demo para los dashboards y el video.
-6. Conectar el panel y el portal a Oracle (hoy la mayoría de los flujos usan datos ficticios).
-7. Recuperación de contraseña por preguntas de seguridad.
+**Backend terminado:** 19 tablas instaladas en `SGCD`, 7 paquetes PL/SQL, 239 pruebas de contrato,
+17 de concurrencia, y las APIs de sesión, reservas, pagos, reportes y torneos probadas por HTTP.
+
+1. **Fase 4, unidad 5: pantallas conectadas.** El panel y el portal todavía leen `demo/*.js` y
+   `cliente/demo.php`. El detalle por pantalla, con archivos, endpoints y aceptación, está en
+   [`docs/diseno/2026-11-24-pendiente-unidad5.md`](docs/diseno/2026-11-24-pendiente-unidad5.md).
+2. **Página Reportes** nueva en el panel, con los tres informes y selector de fechas.
+3. **Login real del portal** de clientes contra `SGCD_USUARIOS` (hoy usa `cliente/demo.php`).
+4. **Datos operativos** para el video: clientes, reservas, pagos e inscripciones de ejemplo.
+5. **Entrega:** capturas, video, láminas y ensayo de la defensa.
+6. Recuperación de contraseña por preguntas de seguridad.

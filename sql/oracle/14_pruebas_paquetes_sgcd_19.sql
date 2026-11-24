@@ -964,6 +964,21 @@ DBMS_OUTPUT.PUT_LINE('--- UNIDAD 7: SGCD_PKG_RESERVAS');
         V_CANTIDAD NUMBER;
         V_HORA     VARCHAR2(5);
         V_MARTES   DATE := TRUNC(SYSDATE, 'IW') + 8;
+        C          SYS_REFCURSOR;
+        A_ID       NUMBER;
+        A_INICIO   DATE;
+        A_TERMINO  DATE;
+        A_CANCHA   NUMBER;
+        A_NOMBRE_C VARCHAR2(100);
+        A_MOD      NUMBER;
+        A_NOMBRE_M VARCHAR2(100);
+        A_CLI      NUMBER;
+        A_NOMBRE_L VARCHAR2(100);
+        A_TORNEO   NUMBER;
+        A_NOMBRE_T VARCHAR2(100);
+        A_ORIGEN   VARCHAR2(15);
+        A_ESTADO_R VARCHAR2(15);
+        A_IMPORTE  NUMBER(12,2);
 
     BEGIN
 
@@ -1166,6 +1181,38 @@ DBMS_OUTPUT.PUT_LINE('--- UNIDAD 7: SGCD_PKG_RESERVAS');
               'marcar_completadas cierra la confirmada cuya fecha ya paso');
     SELECT r.ESTADO_RESERVA INTO V_ESTADO FROM SGCD_RESERVAS r WHERE r.ID_RESERVA = V_R8;
     COMPROBAR(V_ESTADO = 'CANCELADA', 'marcar_completadas no toca las canceladas');
+
+    V_CANTIDAD := 0;
+    SGCD_PKG_RESERVAS.agenda(V_MARTES, V_MARTES, 4, NULL, C);
+    LOOP
+        FETCH C INTO A_ID, A_INICIO, A_TERMINO, A_CANCHA, A_NOMBRE_C, A_MOD,
+                    A_NOMBRE_M, A_CLI, A_NOMBRE_L, A_TORNEO, A_NOMBRE_T,
+                    A_ORIGEN, A_ESTADO_R, A_IMPORTE;
+        EXIT WHEN C%NOTFOUND;
+        V_CANTIDAD := V_CANTIDAD + 1;
+    END LOOP;
+    CLOSE C;
+    COMPROBAR(V_CANTIDAD >= 3, 'la agenda trae el detalle de la cancha en el dia');
+
+    V_CANTIDAD := 0;
+    SGCD_PKG_RESERVAS.agenda(V_MARTES, V_MARTES, NULL, V_CLI, C);
+    LOOP
+        FETCH C INTO A_ID, A_INICIO, A_TERMINO, A_CANCHA, A_NOMBRE_C, A_MOD,
+                    A_NOMBRE_M, A_CLI, A_NOMBRE_L, A_TORNEO, A_NOMBRE_T,
+                    A_ORIGEN, A_ESTADO_R, A_IMPORTE;
+        EXIT WHEN C%NOTFOUND;
+        IF A_CLI <> V_CLI THEN
+            V_CANTIDAD := -1000;
+        ELSE
+            V_CANTIDAD := V_CANTIDAD + 1;
+        END IF;
+    END LOOP;
+    CLOSE C;
+    COMPROBAR(V_CANTIDAD >= 3, 'la agenda filtra por cliente sin mezclar ajenos');
+
+    ESPERAR_ERROR(
+        'DECLARE C SYS_REFCURSOR; BEGIN SGCD_PKG_RESERVAS.agenda(TRUNC(SYSDATE, ''IW'') + 8, TRUNC(SYSDATE, ''IW'') + 7, NULL, NULL, C); END;',
+        -20044, 'la agenda rechaza un rango invertido');
 END;
 
     ROLLBACK;
@@ -1436,6 +1483,13 @@ BEGIN
         V_RUT_J     NUMBER;
         V_CLIENTE_J NUMBER;
         V_ID_CLIENTE NUMBER;
+        C           SYS_REFCURSOR;
+        L1 NUMBER; L2 VARCHAR2(100); L3 NUMBER; L4 VARCHAR2(100);
+        L5 DATE; L6 DATE; L7 NUMBER; L8 NUMBER; L9 NUMBER;
+        L10 VARCHAR2(15); L11 NUMBER;
+        M1 NUMBER; M2 NUMBER; M3 VARCHAR2(100); M4 VARCHAR2(100);
+        M5 NUMBER; M6 DATE; M7 VARCHAR2(15); M8 NUMBER; M9 VARCHAR2(100);
+        J1 NUMBER; J2 VARCHAR2(20); J3 VARCHAR2(100);
         V_ID_TORNEO NUMBER;
         V_ORIGEN    VARCHAR2(15);
         V_ESTADO_RES VARCHAR2(15);
@@ -1592,6 +1646,36 @@ BEGIN
         SGCD_PKG_TORNEOS.programar_torneo(V_T2, 8, V_MARTES, '13:00', '14:00');
         SELECT COUNT(*) INTO V_CUENTA FROM SGCD_RESERVAS r WHERE r.ID_TORNEO = V_T2;
         COMPROBAR(V_CUENTA = 1, 'un torneo en curso si admite programacion');
+
+        V_CUENTA := 0;
+        SGCD_PKG_TORNEOS.listar_torneos(1, 'PLANIFICADO', NULL, C);
+        LOOP
+            FETCH C INTO L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11;
+            EXIT WHEN C%NOTFOUND;
+            V_CUENTA := V_CUENTA + 1;
+        END LOOP;
+        CLOSE C;
+        COMPROBAR(V_CUENTA >= 2, 'listar_torneos filtra por modalidad y estado');
+
+        V_CUENTA := 0;
+        SGCD_PKG_TORNEOS.listar_inscripciones(V_T1, NULL, C);
+        LOOP
+            FETCH C INTO M1, M2, M3, M4, M5, M6, M7, M8, M9;
+            EXIT WHEN C%NOTFOUND;
+            V_CUENTA := V_CUENTA + 1;
+        END LOOP;
+        CLOSE C;
+        COMPROBAR(V_CUENTA = 3, 'listar_inscripciones trae tambien la retirada del torneo');
+
+        V_CUENTA := 0;
+        SGCD_PKG_TORNEOS.jugadores_inscripcion(V_I3, C);
+        LOOP
+            FETCH C INTO J1, J2, J3;
+            EXIT WHEN C%NOTFOUND;
+            V_CUENTA := V_CUENTA + 1;
+        END LOOP;
+        CLOSE C;
+        COMPROBAR(V_CUENTA = 2, 'jugadores_inscripcion trae la plantilla real');
     END;
 
     ROLLBACK;

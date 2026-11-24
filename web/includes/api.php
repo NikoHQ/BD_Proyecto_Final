@@ -23,6 +23,34 @@ const API_ERRORES = [
     20025 => [400, 'El nombre es obligatorio.'],
     20026 => [409, 'El cliente tiene reservas o cuentas asociadas. Desactivalo en vez de borrarlo.'],
     20027 => [400, 'El filtro o la paginacion no son validos.'],
+    20040 => [400, 'Faltan datos o vienen mal escritos.'],
+    20041 => [409, 'La cancha no admite esa modalidad o no esta disponible.'],
+    20042 => [400, 'Ese horario esta fuera del horario del recinto.'],
+    20043 => [409, 'Ese horario ya esta reservado.'],
+    20044 => [400, 'La fecha u hora esta fuera del rango permitido.'],
+    20045 => [409, 'El cliente o el administrador no estan habilitados.'],
+    20046 => [409, 'El estado actual no permite esa operacion.'],
+    20047 => [404, 'La reserva no existe.'],
+    20050 => [400, 'El medio de pago o los datos no son validos.'],
+    20051 => [404, 'La reserva no existe.'],
+    20052 => [409, 'Solo se cobra por adelantado una reserva confirmada.'],
+    20053 => [409, 'La reserva ya tiene un pago vigente.'],
+    20054 => [409, 'La reserva no tiene un pago que cobrar o anular.'],
+    20055 => [409, 'El pago ya esta anulado.'],
+    20056 => [409, 'No hay diferencia por cobrar.'],
+    20057 => [403, 'Tu usuario no esta habilitado para cobrar.'],
+    20060 => [400, 'Los datos del torneo no son validos.'],
+    20061 => [404, 'El torneo no existe.'],
+    20062 => [409, 'El estado del torneo no permite esa operacion.'],
+    20063 => [409, 'No quedan cupos en el torneo.'],
+    20064 => [409, 'La plantilla supera el maximo del torneo.'],
+    20065 => [409, 'Ese jugador ya esta en el equipo.'],
+    20066 => [409, 'Ese jugador ya juega en otro equipo del torneo.'],
+    20067 => [409, 'El capitan no existe o esta inactivo.'],
+    20068 => [404, 'La inscripcion no existe o no esta vigente.'],
+    20069 => [409, 'Ya hay un equipo con ese nombre en el torneo.'],
+    20070 => [400, 'El rango de programacion debe cubrir bloques completos.'],
+    20080 => [400, 'El reporte necesita un rango de fechas valido.'],
 ];
 
 function apiJson(array $carga, int $estado = 200): never
@@ -53,6 +81,43 @@ function apiErrorOracle(int $codigo, string $mensaje): never
     apiFail($texto, $estado, $codigo);
 }
 
+/** Fecha Y-m-d del navegador; se devuelve lista para bind DATE. */
+function apiFecha(string $valor, string $campo = 'fecha'): string
+{
+    $fecha = DateTimeImmutable::createFromFormat('!Y-m-d', $valor);
+    if (!$fecha || $fecha->format('Y-m-d') !== $valor) {
+        apiFail('El campo ' . $campo . ' no es una fecha valida.', 400);
+    }
+    return $valor . ' 00:00:00';
+}
+
+/** Hora HH:MM del navegador. */
+function apiHora(string $valor): string
+{
+    if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $valor)) {
+        apiFail('La hora debe venir en formato HH:MM.', 400);
+    }
+    return $valor;
+}
+
+/** "12.345.678-5", "12345678-5" o "123456785" -> [12345678, "5"]. */
+function apiRutPartes(string $crudo): array
+{
+    $compacto = strtoupper((string) preg_replace('/[.\s-]/', '', trim($crudo)));
+    if (!preg_match('/^([1-9]\d{0,7})([0-9K])$/', $compacto, $partes)) {
+        apiFail('Escribe el RUT completo, con su digito verificador.', 400);
+    }
+    return [(int) $partes[1], $partes[2]];
+}
+
+function apiEntero(mixed $valor, string $campo): int
+{
+    if (!is_numeric($valor) || (string) (int) $valor !== (string) $valor) {
+        apiFail('El campo ' . $campo . ' no es valido.', 400);
+    }
+    return (int) $valor;
+}
+
 /** Cuerpo de la peticion: JSON o formulario, sin distinguir el cliente. */
 function apiEntrada(): array
 {
@@ -80,10 +145,13 @@ function apiSesion(array $perfiles): array
     if (!in_array($cuenta['ROL'], $perfiles, true)) {
         apiFail('Tu perfil no permite esta operacion.', 403);
     }
-    // Los triggers de auditoria atribuyen el cambio a CLIENT_IDENTIFIER. Se
-    // declara aqui, una vez por peticion, con el administrador de la sesion.
-    apiLlamar('BEGIN DBMS_SESSION.SET_IDENTIFIER(:id); END;',
-        ['id' => (int) $cuenta['PERSONAL']]);
+    // Los triggers de auditoria atribuyen el cambio a CLIENT_IDENTIFIER y ese
+    // valor termina en ID_ADMINISTRADOR. Solo se declara para personal: un
+    // cliente no tiene fila en esa tabla.
+    if ($cuenta['ROL'] === 'ADMINISTRADOR' && !empty($cuenta['PERSONAL'])) {
+        apiLlamar('BEGIN DBMS_SESSION.SET_IDENTIFIER(:id); END;',
+            ['id' => (int) $cuenta['PERSONAL']]);
+    }
     return $cuenta;
 }
 

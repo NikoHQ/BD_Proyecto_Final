@@ -22,6 +22,9 @@
 -- del torneo, no llevan cliente y nacen CONFIRMADA. SGCD_PKG_TORNEOS las crea
 -- por esa puerta y no inserta en SGCD_RESERVAS por su cuenta.
 --
+-- agenda entrega el detalle del calendario para el panel y el portal: incluye
+-- todos los estados, y las canceladas se distinguen por su ESTADO_RESERVA.
+--
 -- Codigos: -20040 datos invalidos, -20041 cancha o modalidad invalida,
 -- -20042 fuera de horario, -20043 choque de horario, -20044 fecha u hora
 -- fuera de rango, -20045 cliente o administrador no habilitado, -20046 el
@@ -43,6 +46,12 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_RESERVAS AS
         p_fecha        DATE,
         p_hora_desde   VARCHAR2,
         p_bloques      NUMBER) RETURN NUMBER;
+    PROCEDURE agenda(
+        p_desde      DATE,
+        p_hasta      DATE,
+        p_id_cancha  NUMBER DEFAULT NULL,
+        p_id_cliente NUMBER DEFAULT NULL,
+        p_cursor     OUT SYS_REFCURSOR);
     PROCEDURE crear_reserva(
         p_id_cliente       NUMBER,
         p_id_administrador NUMBER,
@@ -312,6 +321,35 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_RESERVAS AS
         WHEN OTHERS THEN
             RETURN 0;
     END disponible;
+
+    PROCEDURE agenda(
+        p_desde      DATE,
+        p_hasta      DATE,
+        p_id_cancha  NUMBER DEFAULT NULL,
+        p_id_cliente NUMBER DEFAULT NULL,
+        p_cursor     OUT SYS_REFCURSOR) IS
+    BEGIN
+        IF p_desde IS NULL OR p_hasta IS NULL OR TRUNC(p_hasta) < TRUNC(p_desde) THEN
+            RAISE_APPLICATION_ERROR(-20044, 'El rango de la agenda no es valido');
+        END IF;
+        OPEN p_cursor FOR
+            SELECT r.ID_RESERVA, r.INICIO_RESERVA, r.TERMINO_RESERVA,
+                   r.ID_CANCHA, c.NOMBRE_CANCHA,
+                   r.ID_MODALIDAD, m.NOMBRE_MODALIDAD,
+                   r.ID_CLIENTE, cl.NOMBRE_CLIENTE,
+                   r.ID_TORNEO, t.NOMBRE_TORNEO,
+                   r.ORIGEN_RESERVA, r.ESTADO_RESERVA, r.IMPORTE_ACORDADO
+            FROM   SGCD_RESERVAS r
+            JOIN   SGCD_CANCHAS c ON c.ID_CANCHA = r.ID_CANCHA
+            JOIN   SGCD_MODALIDADES m ON m.ID_MODALIDAD = r.ID_MODALIDAD
+            LEFT   JOIN SGCD_CLIENTES cl ON cl.ID_CLIENTE = r.ID_CLIENTE
+            LEFT   JOIN SGCD_TORNEOS t ON t.ID_TORNEO = r.ID_TORNEO
+            WHERE  r.INICIO_RESERVA >= TRUNC(p_desde)
+              AND  r.INICIO_RESERVA < TRUNC(p_hasta) + 1
+              AND  (p_id_cancha IS NULL OR r.ID_CANCHA = p_id_cancha)
+              AND  (p_id_cliente IS NULL OR r.ID_CLIENTE = p_id_cliente)
+            ORDER  BY r.INICIO_RESERVA, c.NOMBRE_CANCHA;
+    END agenda;
 
     PROCEDURE insertar_reserva(
         p_id_cliente       NUMBER,

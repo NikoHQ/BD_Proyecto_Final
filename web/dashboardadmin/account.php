@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 authStart();
-$account = requireAccount();
+$account = requireStaff();
 $view = $_GET['vista'] ?? 'perfil';
 if (!in_array($view, ['perfil', 'seguridad', 'usuarios'], true)) $view = 'perfil';
 if ($view === 'usuarios' && $account['ROL'] !== 'ADMINISTRADOR') {
@@ -31,8 +31,8 @@ function saveAccountProfile(array $account): void
 
 function saveStaff(array $account, string $action): void
 {
-    // Serializa cambios de roles para que dos administradores activos no puedan desactivarse entre sí.
-    authQuery('LOCK TABLE SGCD_CREDENCIALES IN SHARE ROW EXCLUSIVE MODE');
+    // Serializa cambios de usuarios para que dos administradores activos no puedan desactivarse entre sí.
+    authQuery('LOCK TABLE SGCD_USUARIOS IN SHARE ROW EXCLUSIVE MODE');
     $actor = accountBy('id', (int) $account['ID']);
     if (!accountActive($actor) || $actor['ROL'] !== 'ADMINISTRADOR' ||
         !hash_equals($_SESSION['version'], hash('sha256', $actor['CLAVE']))) {
@@ -45,26 +45,28 @@ function saveStaff(array $account, string $action): void
         $login = checkedLogin();
         $hash = newPasswordHash();
         authQuery('DECLARE
+                      user_id  NUMBER;
                       staff_id NUMBER;
-                      credential_id NUMBER;
                    BEGIN
-                      INSERT INTO SGCD_ADMINISTRADORES (NOMBRE_ADMINISTRADOR)
-                        VALUES (:name) RETURNING ID_ADMINISTRADOR INTO staff_id;
-                      SGCD_PKG_AUTH.crear_credencial(:login, :hash, :role, NULL, staff_id, credential_id);
-                   END;', ['name' => $name, 'login' => $login, 'hash' => $hash, 'role' => 'ADMINISTRADOR']);
+                      SGCD_PKG_AUTH.crear_usuario(:login, :hash, :role, user_id);
+                      SGCD_CREAR_ADMINISTRADOR(user_id, :name, :estado, staff_id);
+                   END;',
+            ['name' => $name, 'login' => $login, 'hash' => $hash,
+             'role' => 'ADMINISTRADOR', 'estado' => 'ACTIVO']);
     } else {
         $target = accountBy('id', (int) post('id'), true);
         if (!$target || $target['ID'] === $actor['ID']) throw new DomainException('Edita tus datos desde Mi perfil.');
         $status = post('status');
-        if (!in_array($status, ['ACTIVA', 'BLOQUEADA', 'INACTIVA'], true)) throw new DomainException('Selecciona un estado válido.');
+        if (!in_array($status, ['ACTIVA', 'INACTIVA'], true)) throw new DomainException('Selecciona un estado válido.');
         authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
             ['name' => $name, 'id' => $target['PERSONAL']]);
-        authQuery('UPDATE SGCD_CREDENCIALES SET ESTADO_CREDENCIAL = :status WHERE ID_CREDENCIAL = :id',
-            ['status' => $status, 'id' => $target['ID']]);
+        $estado = $status === 'ACTIVA' ? 'ACTIVO' : 'INACTIVO';
+        authQuery('BEGIN SGCD_PKG_AUTH.cambiar_estado(:id, :estado); END;',
+            ['id' => $target['ID'], 'estado' => $estado]);
         if (post('password') !== '' || post('confirm') !== '') {
             $hash = newPasswordHash();
-            authQuery('UPDATE SGCD_CREDENCIALES SET CLAVE_HASH_CREDENCIAL = :hash WHERE ID_CREDENCIAL = :id',
-                ['hash' => $hash, 'id' => $target['ID']]);
+            authQuery('BEGIN SGCD_PKG_AUTH.cambiar_clave(:id, :hash); END;',
+                ['id' => $target['ID'], 'hash' => $hash]);
         }
     }
     if (!oci_commit(authDb())) throw new RuntimeException('No se pudo guardar el usuario.');
@@ -111,11 +113,12 @@ $staff = [];
 $target = null;
 try {
     if ($view === 'usuarios') {
-        $stmt = authQuery("SELECT c.ID_CREDENCIAL AS ID, c.LOGIN_CREDENCIAL AS USUARIO, c.ROL_CREDENCIAL AS ROL,
-                                  c.ESTADO_CREDENCIAL AS ESTADO, a.NOMBRE_ADMINISTRADOR AS NOMBRE
-                           FROM SGCD_CREDENCIALES c JOIN SGCD_ADMINISTRADORES a
-                             ON a.ID_ADMINISTRADOR = c.ID_ADMINISTRADOR
-                           WHERE c.ROL_CREDENCIAL IN ('ADMINISTRADOR', 'OPERADOR') ORDER BY a.NOMBRE_ADMINISTRADOR");
+        $stmt = authQuery("SELECT u.ID_USUARIO AS ID, u.LOGIN AS USUARIO, u.ROL AS ROL,
+                                  CASE u.ESTADO_USUARIO WHEN 'ACTIVO' THEN 'ACTIVA' ELSE 'INACTIVA' END AS ESTADO,
+                                  a.NOMBRE_ADMINISTRADOR AS NOMBRE
+                           FROM SGCD_USUARIOS u JOIN SGCD_ADMINISTRADORES a
+                             ON a.ID_USUARIO = u.ID_USUARIO
+                           ORDER BY a.NOMBRE_ADMINISTRADOR");
         oci_fetch_all($stmt, $staff, 0, -1, OCI_FETCHSTATEMENT_BY_ROW);
         if (isset($_GET['editar']) && ctype_digit((string) $_GET['editar'])) {
             $candidate = accountBy('id', (int) $_GET['editar']);
@@ -133,7 +136,7 @@ function currentPasswordField(): string
 }
 function roleName(string $role): string
 {
-    return $role === 'ADMINISTRADOR' ? 'Administrador' : 'Operador';
+    return $role === 'ADMINISTRADOR' ? 'Administrador' : 'Cliente';
 }
 ?>
 <!doctype html>
@@ -208,7 +211,7 @@ function roleName(string $role): string
           <?php if ($target): ?>
             <input type="hidden" name="id" value="<?= (int) $target['ID'] ?>">
             <label class="form-label w-100">Estado<select class="form-select" name="status">
-              <?php foreach (['ACTIVA' => 'Activa', 'BLOQUEADA' => 'Bloqueada', 'INACTIVA' => 'Inactiva'] as $key => $label): ?>
+              <?php foreach (['ACTIVA' => 'Activa', 'INACTIVA' => 'Inactiva'] as $key => $label): ?>
                 <option value="<?= $key ?>"<?= $key === $target['ESTADO'] ? ' selected' : '' ?>><?= $label ?></option>
               <?php endforeach; ?>
             </select></label>

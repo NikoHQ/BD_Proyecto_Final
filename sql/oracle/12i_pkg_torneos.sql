@@ -61,6 +61,21 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_TORNEOS AS
         p_fecha      DATE,
         p_hora_desde VARCHAR2,
         p_hora_hasta VARCHAR2);
+    PROCEDURE listar_torneos(
+        p_id_modalidad NUMBER DEFAULT NULL,
+        p_estado       VARCHAR2 DEFAULT NULL,
+        p_id_cliente   NUMBER DEFAULT NULL,
+        p_cursor       OUT SYS_REFCURSOR);
+    PROCEDURE listar_inscripciones(
+        p_id_torneo  NUMBER DEFAULT NULL,
+        p_id_cliente NUMBER DEFAULT NULL,
+        p_cursor     OUT SYS_REFCURSOR);
+    PROCEDURE inscripcion(
+        p_id_inscripcion NUMBER,
+        p_cursor         OUT SYS_REFCURSOR);
+    PROCEDURE jugadores_inscripcion(
+        p_id_inscripcion NUMBER,
+        p_cursor         OUT SYS_REFCURSOR);
 END SGCD_PKG_TORNEOS;
 /
 
@@ -456,6 +471,79 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
                 RAISE;
         END;
     END programar_torneo;
+
+
+    PROCEDURE listar_torneos(
+        p_id_modalidad NUMBER DEFAULT NULL,
+        p_estado       VARCHAR2 DEFAULT NULL,
+        p_id_cliente   NUMBER DEFAULT NULL,
+        p_cursor       OUT SYS_REFCURSOR) IS
+    BEGIN
+        OPEN p_cursor FOR
+            SELECT t.ID_TORNEO, t.NOMBRE_TORNEO,
+                   t.ID_MODALIDAD, m.NOMBRE_MODALIDAD,
+                   t.FECHA_INICIO, t.FECHA_TERMINO,
+                   t.CUPOS_TORNEO,
+                   (SELECT COUNT(*) FROM SGCD_INSCRIPCIONES_TORNEO i
+                    WHERE i.ID_TORNEO = t.ID_TORNEO
+                      AND i.ESTADO_INSCRIPCION = 'INSCRITO') AS INSCRITOS,
+                   t.MAX_JUGADORES_POR_EQUIPO, t.ESTADO_TORNEO,
+                   (SELECT MAX(i.ID_INSCRIPCION) FROM SGCD_INSCRIPCIONES_TORNEO i
+                    WHERE i.ID_TORNEO = t.ID_TORNEO
+                      AND i.ESTADO_INSCRIPCION = 'INSCRITO'
+                      AND i.ID_CLIENTE = p_id_cliente) AS MI_INSCRIPCION
+            FROM   SGCD_TORNEOS t
+            JOIN   SGCD_MODALIDADES m ON m.ID_MODALIDAD = t.ID_MODALIDAD
+            WHERE  (p_id_modalidad IS NULL OR t.ID_MODALIDAD = p_id_modalidad)
+              AND  (p_estado IS NULL OR t.ESTADO_TORNEO = p_estado)
+            ORDER  BY t.FECHA_INICIO, t.NOMBRE_TORNEO;
+    END listar_torneos;
+
+    PROCEDURE listar_inscripciones(
+        p_id_torneo  NUMBER DEFAULT NULL,
+        p_id_cliente NUMBER DEFAULT NULL,
+        p_cursor     OUT SYS_REFCURSOR) IS
+    BEGIN
+        OPEN p_cursor FOR
+            SELECT i.ID_INSCRIPCION, i.ID_TORNEO, t.NOMBRE_TORNEO,
+                   i.NOMBRE_EQUIPO, i.CANTIDAD_JUGADORES, i.FECHA_INSCRIPCION,
+                   i.ESTADO_INSCRIPCION, i.ID_CLIENTE, c.NOMBRE_CLIENTE AS CAPITAN
+            FROM   SGCD_INSCRIPCIONES_TORNEO i
+            JOIN   SGCD_TORNEOS t ON t.ID_TORNEO = i.ID_TORNEO
+            JOIN   SGCD_CLIENTES c ON c.ID_CLIENTE = i.ID_CLIENTE
+            WHERE  (p_id_torneo IS NULL OR i.ID_TORNEO = p_id_torneo)
+              AND  (p_id_cliente IS NULL OR i.ID_CLIENTE = p_id_cliente)
+            ORDER  BY i.FECHA_INSCRIPCION DESC, i.NOMBRE_EQUIPO;
+    END listar_inscripciones;
+
+    PROCEDURE inscripcion(
+        p_id_inscripcion NUMBER,
+        p_cursor         OUT SYS_REFCURSOR) IS
+    BEGIN
+        OPEN p_cursor FOR
+            SELECT i.ID_INSCRIPCION, i.ID_TORNEO, t.NOMBRE_TORNEO,
+                   i.NOMBRE_EQUIPO, i.ID_CLIENTE, c.NOMBRE_CLIENTE AS CAPITAN,
+                   i.CANTIDAD_JUGADORES, i.FECHA_INSCRIPCION,
+                   i.ESTADO_INSCRIPCION, t.MAX_JUGADORES_POR_EQUIPO
+            FROM   SGCD_INSCRIPCIONES_TORNEO i
+            JOIN   SGCD_TORNEOS t ON t.ID_TORNEO = i.ID_TORNEO
+            JOIN   SGCD_CLIENTES c ON c.ID_CLIENTE = i.ID_CLIENTE
+            WHERE  i.ID_INSCRIPCION = p_id_inscripcion;
+    END inscripcion;
+
+    PROCEDURE jugadores_inscripcion(
+        p_id_inscripcion NUMBER,
+        p_cursor         OUT SYS_REFCURSOR) IS
+    BEGIN
+        OPEN p_cursor FOR
+            SELECT j.ID_JUGADOR,
+                   j.RUT_JUGADOR || '-' || j.DV_JUGADOR AS RUT,
+                   j.NOMBRE_JUGADOR
+            FROM   SGCD_EQUIPOS_JUGADORES ej
+            JOIN   SGCD_JUGADORES j ON j.ID_JUGADOR = ej.ID_JUGADOR
+            WHERE  ej.ID_INSCRIPCION = p_id_inscripcion
+            ORDER  BY j.NOMBRE_JUGADOR;
+    END jugadores_inscripcion;
 
 END SGCD_PKG_TORNEOS;
 /

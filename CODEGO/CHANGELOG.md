@@ -768,3 +768,138 @@ script es idempotente.
 **Pendiente inmediato.** Un solo commit con toda la fase 3 en el árbol de trabajo (regla de Naiko:
 no commitear hasta cerrar la unidad 11), y después la fase 4: conectar el portal y el panel a los
 paquetes.
+
+---
+
+## 2026-11-24 (6) — Fase 4, unidad 2: API de reservas
+
+**Contexto.** El modelo de 19 tablas quedó instalado en el esquema `SGCD` y la sesión web
+reescrita sobre `SGCD_USUARIOS`. Sobre eso se conecta la primera pantalla de negocio: agenda,
+disponibilidad y mutaciones de reserva para el panel, y solicitud y "mis reservas" para el portal.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/12g_pkg_reservas.sql` | `agenda(desde, hasta, cancha, cliente, cursor)`: detalle del calendario con cancha, modalidad, cliente y torneo |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | 3 comprobaciones nuevas de agenda (236 en total) |
+| `web/dashboardadmin/api/reservas.php` | Agenda, disponibilidad, crear, confirmar, cancelar y reprogramar |
+| `web/api/reservas.php` | Disponibilidad, solicitud web y "mis reservas"; el cliente sale de la sesión |
+| `web/includes/reservas-dto.php` | DTO y disponibilidad compartidos por las dos caras |
+| `web/includes/api.php` | `apiFecha`, `apiHora` y `apiEntero` |
+| `web/includes/auth.php` | `NLS_DATE_FORMAT` ISO en la conexión; el CSRF sobrevive al login |
+
+**Decisiones de la sesión.** El portal nunca recibe un ID de cliente por parámetro: lo toma de la
+sesión (`CLIENTE.ID_CLIENTE`) y no expone acciones de administración. El cliente no cancela, igual
+que la política del paquete. La agenda devuelve todos los estados para que el panel dibuje también
+las canceladas. Las fechas viajan como `YYYY-MM-DD HH24:MI:SS` porque la conexión fija ese formato,
+y así los binds DATE no dependen del locale del servidor.
+
+**Verificación.** `14_` con **236 comprobaciones en verde** sobre `SGCD`. Pruebas HTTP contra el
+servidor embebido de PHP con las variables del pool: agenda vacía, disponibilidad, alta de reserva
+(id 76), choque con `409/20043`, solicitud web (id 77, `PENDIENTE`), confirmación, reprogramación a
+las 12:00, "mis reservas" del cliente y rechazo de acciones de administración desde el portal.
+Datos de prueba borrados: 0 reservas, 0 pagos.
+
+**Hallazgos**
+
+1. `startAccount` reemplazaba `$_SESSION` y borraba el token CSRF; el primer POST después del login
+   fallaba. Se conserva el token al rotar la sesión.
+2. El servidor embebido con OPcache `enable_cli=1` sirvió una versión vieja de `auth.php` hasta
+   reiniciarlo; para pruebas locales conviene `-d opcache.enable_cli=0`.
+3. La agenda no pagina: el panel filtra por rango y cancha, que es suficiente para el volumen del
+   proyecto.
+
+**Siguiente.** Unidad 3: pagos y reportes (`SGCD_PKG_PAGOS` y `SGCD_PKG_CONSULTAS`) con sus
+endpoints y la página Reportes.
+
+---
+
+## 2026-11-24 (7) — Fase 4, unidad 3: pagos y reportes
+
+**Contexto.** Sobre la API de reservas se conectan la caja y los tres informes. El reporte de
+ingresos queda solo para administración, como se decidió: el portal no lo expone.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `web/dashboardadmin/api/pagos.php` | Ver pago, saldo, registrar, cobrar diferencia y anular |
+| `web/dashboardadmin/api/reportes.php` | Ingresos, reservas por cancha y clientes por reservas |
+| `infra/desplegar-web.sh` | Publica `web/` en `/srv/http` sin `sudo`, con la ACL de `naiko` |
+| `README.md` | (pendiente de la entrada de cierre de fase 4) |
+
+**Decisiones de la sesión.** Los cinco procedimientos de pago se exponen solo al panel; el portal no
+tiene endpoint de pago. Las acciones de lectura usan `GET` y las mutaciones `POST` con CSRF. El
+medio de pago viaja como texto y el paquete lo normaliza. Los reportes reciben rango obligatorio y
+`cliente` opcional; el de ingresos no acepta cliente por diseño.
+
+**Verificación.** Pruebas HTTP contra el servidor embebido: reserva 78 creada, saldo 18.000, pago
+registrado, doble pago rechazado con `409/20053`, `pago_de_reserva` con saldo 0, ingresos del día
+con una fila y 18.000, canchas y clientes con su fila, anulación que devuelve el saldo a 18.000 y
+deja los ingresos vacíos. Datos de prueba borrados: 0 reservas, 0 pagos. Desplegado en `/srv/http`
+y el endpoint sin sesión responde `401`.
+
+**Despliegue sin sudo.** Se aplicó una ACL de `naiko` sobre `/srv/http` (acceso y default) y el
+script usa `rsync -rl --no-perms --no-times --omit-dir-times --delete`: los archivos existentes son
+de `http:http` y `naiko` no puede cambiar sus atributos, pero sí el contenido, crear y borrar.
+
+**Siguiente.** Unidad 4: API de torneos (inscripción, nómina, retiro y programación) y después las
+pantallas conectadas.
+
+---
+
+## 2026-11-24 (8) — Fase 4, unidad 4: API de torneos
+
+**Contexto.** El paquete de torneos sabía escribir pero no consultar; sin cartelera ni "mis
+inscripciones" el portal no podía mostrar nada. Se agregan cuatro cursores y se exponen las dos
+caras: administración y cliente.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `sql/oracle/12i_pkg_torneos.sql` | `listar_torneos`, `listar_inscripciones`, `inscripcion` y `jugadores_inscripcion` |
+| `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | 3 comprobaciones nuevas (239 en total) |
+| `web/dashboardadmin/api/torneos.php` | Listar, crear, inscribir, agregar, retirar, máximo y programar |
+| `web/api/torneos.php` | Cartelera, mis inscripciones, detalle propio, inscribir, agregar y retirar |
+| `web/includes/torneos-dto.php` | DTO y consultas compartidas, con control de propiedad |
+| `web/includes/api.php`, `web/api/clientes.php` | `apiRutPartes` compartido; el parser de clientes lo reutiliza |
+
+**Decisiones de la sesión.** El portal nunca recibe el cliente: la inscripción se crea a nombre de
+la sesión. Agregar o retirar jugadores exige que la inscripción sea del cliente; si no, responde
+404 igual que una inexistente, para no filtrar equipos ajenos. La cartelera devuelve
+`mi_inscripcion` por torneo. El máximo se puede omitir al crear y se copia de la modalidad.
+
+**Verificación.** `14_` con **239 comprobaciones en verde**. Pruebas HTTP: torneo 24 creado, listado
+con inscritos y cupos, inscripción 26 con capitana, jugador agregado (plantilla 2), detalle con la
+nómina, programación de dos bloques en la agenda con `origen TORNEO`, inscripción ajena 27, portal
+con `mi_inscripcion=26`, "mias" con la plantilla, rechazo 404 al tocar la inscripción ajena y retiro
+propio. Datos borrados: 0 reservas, 0 pagos, 0 inscripciones; quedan los 3 torneos del catálogo.
+
+**Hallazgo.** `listar_inscripciones` devuelve también las retiradas, a propósito: el portal debe
+conservar el historial que exige el contrato de torneos.
+
+**Siguiente.** Unidad 5: conectar agenda, pagos, torneos y reportes en el panel y el portal,
+retirar los `demo/*.js` de las vistas conectadas y agregar la página Reportes.
+
+---
+
+## 2026-11-24 (9) — Cierre de sesión: fase 4 hasta la unidad 4 y pendiente de la 5
+
+**Contexto.** Se corta el trabajo con el backend completo y las pantallas todavía en modo
+demostración. Se deja el punto de retomada escrito para no reconstruirlo de memoria.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `docs/diseno/2026-11-24-pendiente-unidad5.md` | Checklist por pantalla: archivos, endpoints, aceptación, orden y pruebas |
+| `README.md` | "Qué falta" reescrito: backend cerrado, unidad 5 pendiente con enlace al checklist |
+
+**Estado al cerrar.** `SGCD` con las 19 tablas y los 7 paquetes `VALID`; `14_` con 239
+comprobaciones; `tests/integracion_dos_sesiones.sh` con 17; APIs de sesión, reservas, pagos,
+reportes y torneos desplegadas en `/srv/http` y probadas por HTTP. El panel y el portal siguen
+leyendo datos de demostración.
+
+**Retomar por:** agenda del panel → Reportes → pagos → torneos → portal con login real.

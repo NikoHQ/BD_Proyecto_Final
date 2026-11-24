@@ -5,7 +5,7 @@ require_once __DIR__ . '/../includes/portal-inbox.php';
 require_once __DIR__ . '/../cliente/demo.php';
 
 authStart();
-$account = requireAccount();
+$account = requireStaff();
 $canConfirm = $account['ROL'] === 'ADMINISTRADOR';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     checkCsrf();

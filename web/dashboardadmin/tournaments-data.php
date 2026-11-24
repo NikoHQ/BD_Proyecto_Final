@@ -5,7 +5,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/tournament-store.php';
 
 authStart();
-requireAccount();
+requireStaff();
 header('Content-Type: application/json; charset=utf-8');
 
 $store = new TournamentStore();

@@ -22,6 +22,9 @@ function authDb(): mixed
         $service = '//' . getenv('SGCD_DB_HOST') . ':' . getenv('SGCD_DB_PORT') . '/' . getenv('SGCD_DB_SERVICE');
         $connection = @oci_connect(getenv('SGCD_DB_USER'), getenv('SGCD_DB_PASSWORD'), $service, 'AL32UTF8');
         if (!$connection) throw new RuntimeException('Oracle no está disponible.');
+        // Las fechas viajan como 'YYYY-MM-DD HH24:MI:SS' y se pueden bindear tal cual.
+        $ajuste = oci_parse($connection, "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'");
+        if ($ajuste) oci_execute($ajuste);
     }
     return $connection;
 }
@@ -50,17 +53,28 @@ function authRow(string $sql, array $params = []): ?array
     return $row ?: null;
 }
 
+/**
+ * Cuenta del modelo de 19 tablas: SGCD_USUARIOS guarda el acceso y la ficha
+ * cuelga por ID_USUARIO, ya sea administrador o cliente. El arreglo mantiene
+ * las llaves que usan las pantallas (ID, USUARIO, CLAVE, ROL, PERSONAL...)
+ * para no tocar cada pagina al cambiar el esquema.
+ */
 function accountBy(string $field, string|int $value, bool $lock = false): ?array
 {
-    $column = $field === 'login' ? 'c.LOGIN_CREDENCIAL' : 'c.ID_CREDENCIAL';
-    return authRow("SELECT c.ID_CREDENCIAL AS ID, c.LOGIN_CREDENCIAL AS USUARIO,
-                           c.CLAVE_HASH_CREDENCIAL AS CLAVE, c.ROL_CREDENCIAL AS ROL,
-                           c.ESTADO_CREDENCIAL AS ESTADO, a.ID_ADMINISTRADOR AS PERSONAL,
-                           a.NOMBRE_ADMINISTRADOR AS NOMBRE, a.ESTADO_ADMINISTRADOR AS ESTADO_PERSONAL
-                    FROM SGCD_CREDENCIALES c JOIN SGCD_ADMINISTRADORES a
-                      ON a.ID_ADMINISTRADOR = c.ID_ADMINISTRADOR
-                    WHERE $column = :value AND c.ROL_CREDENCIAL IN ('ADMINISTRADOR', 'OPERADOR')" .
-                    ($lock ? ' FOR UPDATE OF c.CLAVE_HASH_CREDENCIAL' : ''), ['value' => $value]);
+    $column = $field === 'login' ? 'u.LOGIN' : 'u.ID_USUARIO';
+    return authRow("SELECT u.ID_USUARIO AS ID, u.LOGIN AS USUARIO,
+                           u.CLAVE_HASH AS CLAVE, u.ROL AS ROL,
+                           CASE u.ESTADO_USUARIO WHEN 'ACTIVO' THEN 'ACTIVA' ELSE 'INACTIVA' END AS ESTADO,
+                           COALESCE(a.ID_ADMINISTRADOR, c.ID_CLIENTE) AS PERSONAL,
+                           COALESCE(a.NOMBRE_ADMINISTRADOR, c.NOMBRE_CLIENTE, u.LOGIN) AS NOMBRE,
+                           CASE WHEN a.ID_ADMINISTRADOR IS NOT NULL THEN a.ESTADO_ADMINISTRADOR
+                                WHEN c.ID_CLIENTE IS NOT NULL THEN c.ESTADO_CLIENTE
+                                ELSE 'ACTIVO' END AS ESTADO_PERSONAL
+                    FROM SGCD_USUARIOS u
+                    LEFT JOIN SGCD_ADMINISTRADORES a ON a.ID_USUARIO = u.ID_USUARIO
+                    LEFT JOIN SGCD_CLIENTES c ON c.ID_USUARIO = u.ID_USUARIO
+                    WHERE $column = :value" .
+                    ($lock ? ' FOR UPDATE OF u.CLAVE_HASH' : ''), ['value' => $value]);
 }
 
 function accountActive(?array $account): bool
@@ -70,12 +84,16 @@ function accountActive(?array $account): bool
 
 function startAccount(array $account): void
 {
+    // El token del formulario de acceso sobrevive al cambio de sesion: el
+    // navegador lo necesita para la primera mutacion despues del login.
+    $csrf = $_SESSION['csrf'] ?? null;
     session_regenerate_id(true);
     $_SESSION = [
         'account' => (int) $account['ID'],
         'version' => hash('sha256', $account['CLAVE']),
         'activity' => time(),
     ];
+    if ($csrf !== null) $_SESSION['csrf'] = $csrf;
 }
 
 function currentAccount(): ?array
@@ -102,6 +120,14 @@ function requireAccount(): array
         exit('El acceso no está disponible. Intenta nuevamente.');
     }
     if (!$account) redirectTo('/dashboardadmin/login.php');
+    return $account;
+}
+
+/** El panel es del personal: un cliente vuelve al portal. */
+function requireStaff(): array
+{
+    $account = requireAccount();
+    if ($account['ROL'] !== 'ADMINISTRADOR') redirectTo('/cliente/');
     return $account;
 }
 
@@ -169,8 +195,9 @@ function rateLimit(string $flow, string $login): void
 
 function checkedLogin(): string
 {
-    $login = strtoupper(trim(post('login')));
-    if (!preg_match('/^[A-Z0-9._-]{3,50}$/D', $login)) throw new DomainException('Ingresa un nombre de usuario válido.');
+    // Los logins del catalogo son minusculas y LOGIN es sensible a mayusculas.
+    $login = trim(post('login'));
+    if (!preg_match('/^[A-Za-z0-9._-]{3,50}$/D', $login)) throw new DomainException('Ingresa un nombre de usuario válido.');
     return $login;
 }
 
@@ -186,7 +213,7 @@ function newPasswordHash(): string
 
 function changeAccountPassword(array $account, string $hash): void
 {
-    authQuery('UPDATE SGCD_CREDENCIALES SET CLAVE_HASH_CREDENCIAL = :hash WHERE ID_CREDENCIAL = :id',
+    authQuery('UPDATE SGCD_USUARIOS SET CLAVE_HASH = :hash WHERE ID_USUARIO = :id',
         ['hash' => $hash, 'id' => $account['ID']]);
     if (!oci_commit(authDb())) throw new RuntimeException('No se pudo guardar la contraseña.');
 }
