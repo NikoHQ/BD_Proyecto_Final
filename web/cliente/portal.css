@@ -88,8 +88,6 @@ input[type="radio"] { width: 1.2rem; height: 1.2rem; accent-color: var(--green);
 .narrow { max-width: 670px; margin-inline: auto; }
 .account-form { display: grid; gap: .42rem; }
 .account-form label:not(:first-of-type) { margin-top: .35rem; }
-.demo-access { background: #edf7f4; padding: .65rem; border-radius: .5rem; }
-.demo-access code { color: #075642; }
 .history-row { display: flex; flex-wrap: wrap; align-items: center; padding: .85rem 0; border-top: 1px solid var(--line); gap: .6rem 1rem; }
 .history-row > div { flex: 1 1 240px; }
 .status { display: inline-block; border-radius: 6px; padding: .25rem .46rem; font-size: .85rem; font-weight: 690; vertical-align: middle; }

@@ -1,6 +1,6 @@
 # Recorridos del portal de clientes SGCD
 
-Abre el [portal](http://127.0.0.1:8080/) y el [panel administrativo](http://127.0.0.1:8080/dashboardadmin/) apuntando a la misma instancia Docker. Para probar el portal por separado puedes ejecutar `php -S 127.0.0.1:8091 -t web` desde la raíz. La demo usa PHP 8.4 o superior. Las credenciales y la instalación están en [ACCESO_DEMO.md](ACCESO_DEMO.md).
+Abre el [portal](http://127.0.0.1:8080/) y el [panel administrativo](http://127.0.0.1:8080/dashboardadmin/) en la misma instancia Docker. Ambos requieren PHP con OCI8 y el esquema Oracle de 19 tablas. Las credenciales y la instalación están en [ACCESO_DEMO.md](ACCESO_DEMO.md).
 
 | Cliente de prueba | Clave | Caso |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ El registro acepta un nuevo usuario de prueba con un RUT válido, por ejemplo `1
 5. Envía una segunda solicitud en otro horario. Desde **Reservas → Solicitudes web**, un administrador puede confirmar una de ellas. En **Mis reservas**, la confirmada cambia de estado y la otra sigue pendiente.
 6. Cancela una reserva futura desde su detalle y comprueba que el horario se puede volver a solicitar. Para revisar el reparto de canchas, reserva la grande y comprueba que las canchas 1, 2 y 3 queden bloqueadas. Las canchas 4, 5 y 6 mantienen disponibilidad propia.
 
-Los controles en **Ayuda** permiten simular un horario ocupado, un cambio de precio, una sesión vencida y un fallo temporal. El reinicio limpia la sesión de demo y sus solicitudes web. Las inscripciones se administran desde **Mis inscripciones**.
+Verifica los conflictos con una reserva existente en Oracle. Las inscripciones se administran desde **Mis inscripciones**.
 
 ## Inscribir un equipo
 
@@ -28,8 +28,8 @@ Los controles en **Ayuda** permiten simular un horario ocupado, un cambio de pre
 4. Revisa y guarda. **Mis inscripciones** muestra el equipo y su plantilla. Editar o retirar depende del plazo y estado de la competencia.
 5. Desde **Torneos → Ver equipos** del panel, recepción puede revisar la inscripción y el cupo consumido.
 
-## Qué comparte la demo
+## Datos compartidos
 
-Las inscripciones y solicitudes web se guardan en archivos de la instancia PHP. El portal relee solicitudes web y bloques de torneo al consultar disponibilidad. Los catálogos editables, tarifas y reservas de mostrador del panel se simulan en el navegador. Una instalación antigua puede mostrar torneos de ejemplo guardados previamente. Para probar una instancia limpia, usa un contenedor de aplicación de pruebas con almacenamiento temporal separado y un perfil de navegador nuevo.
+Ambos paneles consultan el mismo Oracle. Una solicitud web queda disponible en la agenda administrativa. La programación de un torneo y las reservas de mostrador afectan la disponibilidad del portal. Las tarifas y horarios editados desde administración se aplican al volver a consultar.
 
 Para conectar el sistema, sigue la [guía principal](INTEGRACION_BACKEND.md), el [contrato de reservas](RESERVAS_ORACLE.md) y el [contrato de torneos](TORNEOS_ORACLE.md).

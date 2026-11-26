@@ -7,13 +7,14 @@ en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administració
 **Estado hoy (2026-11-26):** el equipo cerró el **UML objetivo de 19 tablas**
 ([UML](docs/modelo/uml-equipo-19/UML_objetivo.mdj) y [mapa de integración](docs/entrega/MODELO_OBJETIVO.md)).
 Están el **DDL de las 19 tablas**, los **catálogos del recinto único** y **los 7 paquetes**
-(`10` a `14` de `sql/oracle/`), compilados, con **239 comprobaciones de contrato** y **17 de
+(`10` a `14` de `sql/oracle/`), compilados, con **240 comprobaciones de contrato** y **17 de
 concurrencia** en verde (`tests/integracion_dos_sesiones.sh`). La **fase 4 está cerrada**: agenda,
 reservas, pagos, torneos y reportes del panel y del portal leen y escriben en Oracle
 ([detalle](docs/diseno/2026-11-24-unidad5-cerrada.md)). La contraparte firmó la
 [carta de validación de la problemática](docs/entrega/carta-validacion-problema-firmada.pdf)
 el 25-11-2026.
-**Siguiente paso:** datos operativos para el video y el resto de la entrega (2026-11-27).
+La carga de datos de laboratorio para la demostración está en el script 15. El panel
+administra clientes, recintos y tarifas sobre Oracle.
 
 - [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
 - [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
@@ -37,8 +38,8 @@ el 25-11-2026.
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
 | `material/` | Enunciados y plantillas del ramo (local, no se versiona) |
 | `infra/` | Instalación del servidor (Apache, PHP, Oracle) e inventario de lo instalado |
-| `web/` | Portal PHP, panel administrativo, JavaScript por página y adaptadores de demostración |
-| `tests/` | Pruebas de los flujos del portal (PHP embebido) |
+| `web/` | Portal PHP, panel administrativo, JavaScript por página y APIs OCI8 |
+| `tests/` | Pruebas de integración por HTTP y concurrencia Oracle |
 | `23-11-26/` | Entrega del equipo del 23-11 (local, no se versiona; el UML vigente está en `docs/modelo/`) |
 | `CODEGO/` | Bitácora y reportes fechados del avance |
 
@@ -53,6 +54,7 @@ el 25-11-2026.
 | `sql/oracle/12a_pkg_auth.sql` … `12j_pkg_consultas.sql` | Paquetes y mantenedores adaptados al modelo objetivo | los 7 paquetes y 9 mantenedores compilados |
 | `sql/oracle/13_pruebas_sgcd_19.sql` | Comprobaciones del DDL y los catálogos, con reversa final | en verde |
 | `sql/oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de los paquetes y mantenedores, por unidad | en verde |
+| `sql/oracle/15_datos_operativos_sgcd_19.sql` | Fichas ficticias, reservas, pagos y equipos para la demostración | carga repetible |
 
 ### Transición v3 (histórica)
 
@@ -64,7 +66,6 @@ el 25-11-2026.
 | `sql/oracle/04_ddl_v3.sql` | Esquema v3 de transición: 23 tablas (cliente web, credenciales, torneos, auditoría) | compilado |
 | `sql/oracle/05_paquetes_plsql.sql` | 6 paquetes de la v3, con el CRUD de la ficha y los 3 reportes | compilado |
 | `sql/oracle/06_catalogos_v3.sql` | Catálogos de la v3 (80 tarifas, credenciales de laboratorio) | cargado |
-| `sql/oracle/07_datos_operativos.sql` | Datos demo: clientes, reservas, pagos, torneos | pendiente |
 | `sql/oracle/08_pruebas_v3.sql` | Pruebas de la v3: ficha y auditoría de clientes, errores y reportes | parcial |
 | `sql/oracle/09_torneos_tamano_plantilla.sql` | Migración incremental del tamaño de plantilla | disponible |
 
@@ -91,11 +92,17 @@ En la torre se sirve con Apache + PHP-FPM nativo sobre el contenedor `oracle-fre
 repositorio:
 
 ```sh
-docker compose up -d
+docker compose up -d --wait oracle
+bash infra/inicializar-oracle-local.sh
+docker compose up -d --no-deps app
 docker compose ps
 ```
 
 Abre el [portal de clientes](http://127.0.0.1:8080/) o el [panel administrativo](http://127.0.0.1:8080/dashboardadmin/). La [guía de acceso](docs/entrega/ACCESO_DEMO.md) explica cómo inicializar una base nueva y contiene las cuentas provisionales.
+
+Para cargar los datos ficticios de la demostración en el esquema local, ejecuta
+`bash infra/inicializar-oracle-local.sh --datos-demo`. Consulta el recorrido y sus fechas de
+referencia en [Datos operativos de la demo](sql/README.md#datos-operativos-de-la-demo).
 
 ## Cómo se decide
 
@@ -105,19 +112,6 @@ documento en el mismo commit.
 
 ## Qué falta
 
-**Backend terminado:** 19 tablas en `SGCD`, 7 paquetes PL/SQL, 239 pruebas de contrato, 17 de
-concurrencia y las APIs probadas por HTTP. **Fase 4 cerrada:** panel y portal conectados a Oracle,
-incluidos Reportes y el login real del portal; ver
-[`2026-11-24-unidad5-cerrada.md`](docs/diseno/2026-11-24-unidad5-cerrada.md). La carta de
-validación ya está firmada por la contraparte.
-
-1. **Datos operativos** para el video: clientes, reservas, pagos e inscripciones de ejemplo
-   (`sql/oracle/07_datos_operativos.sql` adaptado a 19 tablas; hoy solo existe el
-   [prompt](docs/prompts/prompt-datos-operativos.md)).
-2. **Recintos, Tarifas y Clientes** siguen siendo maqueta: conectar los paquetes `12c`, `12d` y
-   `12e`, o retirarlos del menú.
-3. **Código muerto del portal anterior:** `web/cliente/demo.php`, `http.php`, `reservas.php`,
-   `torneos.php`, `portal.php`, `vistas/`, `portal-inbox.php`, `tournament-store.php`,
-   `tournaments-data.php` y `catalogo-oracle.php` (roto contra el modelo de 19 tablas).
-4. **Entrega:** capturas, video, láminas y ensayo de la defensa.
-5. Recuperación de contraseña por preguntas de seguridad (fuera del alcance acordado).
+Queda preparar las capturas, el video, las láminas y el ensayo de la defensa. La
+carta de validación está firmada. La recuperación por preguntas permanece fuera del
+alcance acordado.

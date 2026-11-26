@@ -1,138 +1,143 @@
-function automaticQuote(court, mode, date, start, end) {
-  const bands = demoTariffs.filter(rate => rate.court === court && rate.mode === mode &&
-    rate.day === weekdayIndex(date) && rate.status === 'ACTIVA' &&
-    rate.from <= date && (!rate.until || date <= rate.until));
-  const startMinute = minutes(start);
-  const endMinute = minutes(end);
-  if (endMinute <= startMinute || (endMinute - startMinute) % 60 !== 0) return null;
-  let total = 0;
-  const ids = new Set();
-  for (let block = startMinute; block < endMinute; block += 60) {
-    const band = bands.find(rate => minutes(rate.start) <= block && minutes(rate.end) >= block + 60);
-    if (!band) return null;
-    ids.add(band.id);
-    total += band.rate;
-  }
-  return { amount: Math.round(total), tariffIds: [...ids], priceMode: 'automatic' };
+'use strict';
+
+const tarifasRuta = '/dashboardadmin/api/tarifas.php';
+const estadosTarifa = { ACTIVA: 'Activa', INACTIVA: 'Inactiva' };
+let tarifasAdministracion;
+
+async function cargarTarifas() {
+  if (tarifasAdministracion) return;
+  if (!modalidadesAdministracion) await cargarModalidadesAdministracion();
+  tarifasAdministracion = await apiGet(tarifasRuta);
+}
+
+const nombreModalidadTarifa = id => modalidadesAdministracion?.find(mode => mode.id === id)?.nombre || '';
+const nombreCanchaTarifa = id => canchaPorId(id)?.nombre || '';
+const tarifaFutura = tarifa => tarifa.desde > localClock()[0];
+const franjaTarifa = tarifa => tarifa.inicio + '–' + tarifa.fin;
+const opcionesCanchasTarifa = () => panel.canchas.map(cancha => [String(cancha.id),
+  nombreRecinto(cancha.recinto) + ' · ' + cancha.nombre]);
+const opcionesDiaTarifa = () => weekdays.map((dia, i) => [String(i + 1), dia]);
+
+function accionesTarifa(tarifa) {
+  const id = tarifa.id;
+  const futura = tarifaFutura(tarifa);
+  return [
+    ...(futura ? [['manage-rate-edit-' + id, 'Editar tarifa']] : []),
+    ...(futura && tarifa.estado === 'ACTIVA' && minutes(tarifa.fin) - minutes(tarifa.inicio) >= 120
+      ? [['manage-rate-split-' + id, 'Dividir franja']] : []),
+    ['manage-rate-toggle-' + id, tarifa.estado === 'ACTIVA' ? 'Desactivar' : 'Activar'],
+    ...(futura ? [['manage-rate-confirm-' + id, 'Eliminar', true]] : [])
+  ];
 }
 
 function tariffsDefinition(f) {
-  const options = String(f.court ?? '');
+  const filteredCourt = String(f.court ?? '');
   return {
     title: 'Tarifas', placeholder: 'Cancha, recinto, modalidad o día',
-    description: 'Configura el valor por hora de cada franja. Puedes dividir una franja para cobrar un precio distinto el mismo día.',
+    description: 'Configura el valor por hora de cada franja.',
     headers: ['Tarifa', 'Modalidad', 'Día', 'Franja', 'Valor por hora', 'Estado'],
     toolbar: button('manage-new-tariff', 'Nueva tarifa', 'btn-accent'),
-    filters: (panelRoute().court === undefined ? managementSelect('court', 'Todas las canchas', courts.flatMap(([name, site], i) =>
-      courtMeta[i]?.deleted ? [] : [[String(i), siteName(site) + ' · ' + name]]), options) : '') +
-      managementSelect('day', 'Todos los días', weekdays.map((day, i) => [String(i), day]), f.day) +
-      managementSelect('status', 'Todos los estados', [['ACTIVA', 'Activa'], ['INACTIVA', 'Inactiva']], f.status),
-    rows: demoTariffs.filter(rate => courts[rate.court] && !courtMeta[rate.court]?.deleted &&
-      (options === '' || Number(options) === rate.court) && (!f.day || String(rate.day) === f.day) &&
-      (!f.status || f.status === rate.status) &&
-      managementSearch(f.query, [courts[rate.court][0], siteName(courts[rate.court][1]), rate.mode, weekdays[rate.day]]))
-      .sort((a, b) => a.court - b.court || a.day - b.day || a.start.localeCompare(b.start)),
-    name: rate => courts[rate.court][0],
-    cells: rate => [rate.mode, weekdays[rate.day], rate.start + '–' + rate.end, money.format(rate.rate),
-      rate.status === 'ACTIVA' ? 'Activa' : 'Inactiva'],
-    actions: rate => [['manage-rate-edit-' + rate.id, 'Editar tarifa'], ['manage-rate-split-' + rate.id, 'Dividir franja'], ['manage-rate-toggle-' + rate.id,
-      rate.status === 'ACTIVA' ? 'Desactivar' : 'Activar']],
-    details: rate => managementDetails('Detalle de tarifa', [
-      ['Recinto', siteName(courts[rate.court][1])], ['Cancha', courts[rate.court][0]], ['Modalidad', rate.mode],
-      ['Día', weekdays[rate.day]], ['Franja', rate.start + '–' + rate.end], ['Desde', rate.from],
-      ['Hasta', rate.until || 'Sin fecha de término'], ['Por hora', money.format(rate.rate)]
-    ], button('manage-rate-split-' + rate.id, 'Dividir franja', 'btn-accent') +
-      button('manage-rate-edit-' + rate.id, 'Editar tarifa'))
+    filters: (panelRoute().court === undefined
+      ? managementSelect('court', 'Todas las canchas', opcionesCanchasTarifa(), filteredCourt) : '') +
+      managementSelect('day', 'Todos los días', opcionesDiaTarifa(), f.day) +
+      managementSelect('status', 'Todos los estados', Object.entries(estadosTarifa), f.status),
+    rows: (tarifasAdministracion || []).filter(tarifa =>
+      (!filteredCourt || Number(filteredCourt) === tarifa.cancha) &&
+      (!f.day || Number(f.day) === tarifa.dia) && (!f.status || f.status === tarifa.estado) &&
+      managementSearch(f.query, [
+        nombreCanchaTarifa(tarifa.cancha), nombreRecinto(canchaPorId(tarifa.cancha)?.recinto),
+        nombreModalidadTarifa(tarifa.modalidad), nombreDia(tarifa.dia)
+      ])),
+    name: tarifa => nombreCanchaTarifa(tarifa.cancha),
+    cells: tarifa => [nombreModalidadTarifa(tarifa.modalidad), nombreDia(tarifa.dia), franjaTarifa(tarifa),
+      money.format(tarifa.valor), estadosTarifa[tarifa.estado]],
+    actions: accionesTarifa,
+    details: tarifa => managementDetails('Detalle de tarifa', [
+      ['Recinto', nombreRecinto(canchaPorId(tarifa.cancha)?.recinto)], ['Cancha', nombreCanchaTarifa(tarifa.cancha)],
+      ['Modalidad', nombreModalidadTarifa(tarifa.modalidad)], ['Día', nombreDia(tarifa.dia)],
+      ['Franja', franjaTarifa(tarifa)], ['Vigente desde', tarifa.desde], ['Vigente hasta', tarifa.hasta],
+      ['Por hora', money.format(tarifa.valor)], ['Estado', estadosTarifa[tarifa.estado]]
+    ], accionesTarifa(tarifa).map(([accion, texto, peligro]) =>
+      button(accion, texto, peligro ? 'btn-outline-danger btn-sm' : '')).join(''))
   };
 }
 
-function editTariff(rate = null) {
-  const ids = courts.flatMap((_, i) => courtMeta[i]?.deleted ? [] : [i]);
-  if (!ids.length) return showDialog('Sin canchas', '<p>Agrega una cancha para configurar su tarifa.</p>');
-  const filtered = managementState.tarifas.filters.court;
-  const court = rate?.court ?? (filtered !== undefined && filtered !== '' && ids.includes(Number(filtered)) ? Number(filtered) : ids[0]);
-  managementForm(rate ? 'Editar tarifa' : 'Nueva tarifa', 'tariff', rate?.id || 0,
-    editSelect('court', 'Cancha', ids.map(i => [String(i), siteName(courts[i][1]) + ' · ' + courts[i][0]]), String(court)) +
-    editSelect('mode', 'Modalidad', courtModes(court).map(mode => [mode, mode]), rate?.mode) +
-    editSelect('day', 'Día', weekdays.map((day, i) => [String(i), day]),
-      String(rate?.day ?? (managementState.tarifas.filters.day || weekdayIndex(localClock()[0])))) +
-    '<div class="row"><div class="col-6">' + clockField('start', 'Desde (hora)', rate?.start || '08:00') +
-    '</div><div class="col-6">' + clockField('end', 'Hasta (hora)', rate?.end || '22:00', { end: true }) + '</div></div>' +
-    '<p class="small text-secondary">Usa HH:MM, por ejemplo 22:00–24:00. Escribe 24:00 para terminar a medianoche.</p>' +
-    field('from', 'Vigente desde', rate?.from || localClock()[0], 'type="date" required') +
-    field('until', 'Vigente hasta', rate?.until, 'type="date"') +
-    field('rate', 'Valor por hora (CLP)', rate?.rate, 'type="number" min="1" max="999999999" step="1" required') +
-    editSelect('status', 'Estado', [['ACTIVA', 'Activa'], ['INACTIVA', 'Inactiva']], rate?.status || 'ACTIVA'));
+function editarTarifa(tarifa = null) {
+  const canchas = panel.canchas.filter(cancha => cancha.modalidades.length || cancha.id === tarifa?.cancha);
+  if (!canchas.length) return showDialog('Sin canchas con modalidades', '<p>Asigna una modalidad a una cancha antes de configurar tarifas.</p>');
+  const filtrada = canchaPorId(managementState.tarifas.filters.court);
+  const cancha = tarifa ? canchaPorId(tarifa.cancha) : filtrada?.modalidades.length ? filtrada : canchas[0];
+  const opciones = canchas.map(entry => [String(entry.id), nombreRecinto(entry.recinto) + ' · ' + entry.nombre]);
+  const dia = tarifa?.dia ?? Number(managementState.tarifas.filters.day || diaSemanaIso(localClock()[0]));
+  const horas = horarioDe(cancha.recinto, dia);
+  const selectCancha = editSelect('cancha', 'Cancha', opciones, String(cancha.id));
+  managementForm(tarifa ? 'Editar tarifa' : 'Nueva tarifa', 'tariff', tarifa?.id ?? 0,
+    (tarifa
+      ? '<p class="small text-secondary">' + escapeHtml(cancha.nombre + ' · ' + nombreModalidadTarifa(tarifa.modalidad)) + '</p>'
+      : selectCancha + editSelect('modalidad', 'Modalidad', cancha.modalidades.map(mode => [String(mode.id), mode.nombre]))) +
+    editSelect('dia', 'Día', opcionesDiaTarifa(), String(dia)) +
+    '<div class="row"><div class="col-6">' + clockField('inicio', 'Desde (hora)', tarifa?.inicio || horas?.[0]) +
+    '</div><div class="col-6">' + clockField('fin', 'Hasta (hora)', tarifa?.fin || horas?.[1]) + '</div></div>' +
+    field('desde', 'Vigente desde', tarifa?.desde || localClock()[0], 'type="date" required') +
+    field('hasta', 'Vigente hasta', tarifa?.hasta, 'type="date"') +
+    field('valor', 'Valor por hora (CLP)', tarifa?.valor, 'type="number" min="1" max="999999999" step="1" required'));
 }
 
-function tariffConflict(rate) {
-  return rate.status === 'ACTIVA' && demoTariffs.some(other => other.id !== rate.id &&
-    other.status === 'ACTIVA' && other.court === rate.court && other.mode === rate.mode && other.day === rate.day &&
-    rate.start < other.end && other.start < rate.end && (!rate.until || other.from <= rate.until) &&
-    (!other.until || rate.from <= other.until));
-}
-
-function saveTariff(id, data, error) {
-  const rate = { ...data, id: id || nextTariffId, court: Number(data.court), day: Number(data.day), rate: Number(data.rate) };
-  if (!validClock(rate.start) || !validClock(rate.end, true)) return error('Escribe las horas en formato HH:MM.');
-  if (rate.start >= rate.end) return error('La hora de término debe ser posterior al inicio. Para medianoche escribe 24:00.');
-  const site = siteRecords.find(site => site.key === courts[rate.court]?.[1]);
-  const hours = siteHours(site, rate.day);
-  if (!hours || rate.start < hours[0] || rate.end > hours[1] || (minutes(rate.start) - minutes(hours[0])) % 60 !== 0 ||
-      (minutes(rate.end) - minutes(rate.start)) % 60 !== 0) {
-    return error('La tarifa debe cubrir bloques completos de una hora dentro del horario del recinto.');
-  }
-  if (rate.until && rate.until < rate.from) return error('La fecha de término de vigencia debe ser igual o posterior a la fecha de inicio.');
-  if (!courtModes(rate.court).includes(rate.mode)) return error('Selecciona una modalidad admitida por la cancha.');
-  if (tariffConflict(rate)) return error('La franja se cruza con otra tarifa activa. Si quieres cambiar el precio desde cierta hora, usa Dividir franja en la tarifa existente.');
-  const existing = demoTariffs.find(other => other.id === id);
-  if (existing) Object.assign(existing, rate);
-  else { demoTariffs.push(rate); nextTariffId++; }
-  managementState.tarifas.selected = rate.id;
-  saveManagement();
-  save('Tarifa guardada en la maqueta.');
-}
-
-function openTariffSplit(rate) {
-  managementForm('Dividir franja · ' + weekdays[rate.day], 'tariff-split', rate.id,
-    '<p>' + escapeHtml(courts[rate.court][0] + ' · ' + rate.mode) + '</p>' +
-    '<p class="small text-secondary">La franja ' + escapeHtml(rate.start + '–' + rate.end) +
+function abrirDivisionTarifa(tarifa) {
+  managementForm('Dividir franja · ' + nombreDia(tarifa.dia), 'tariff-split', tarifa.id,
+    '<p>' + escapeHtml(nombreCanchaTarifa(tarifa.cancha) + ' · ' + nombreModalidadTarifa(tarifa.modalidad)) + '</p>' +
+    '<p class="small text-secondary">La franja ' + escapeHtml(franjaTarifa(tarifa)) +
     ' se dividirá en dos con la misma vigencia. El primer tramo conserva su precio de ' +
-    money.format(rate.rate) + ' por hora.</p>' +
-    clockField('splitAt', 'Hora de cambio (HH:MM)', rate.start < '18:00' && '18:00' < rate.end ? '18:00' : '') +
-    field('rate', 'Precio por hora del segundo tramo (CLP)', rate.rate,
-      'type="number" min="1" max="999999999" step="1" required'));
+    money.format(tarifa.valor) + ' por hora.</p>' +
+    clockField('hora', 'Hora de corte') +
+    field('valor', 'Valor por hora del segundo tramo (CLP)', tarifa.valor, 'type="number" min="1" max="999999999" step="1" required'));
 }
 
-function saveTariffSplit(id, data, error) {
-  const rate = demoTariffs.find(entry => entry.id === id);
-  if (!rate) return error('La tarifa ya no está disponible.');
-  const value = Number(data.rate);
-  if (!validClock(data.splitAt) ||
-      data.splitAt <= rate.start || data.splitAt >= rate.end || (minutes(data.splitAt) - minutes(rate.start)) % 60 !== 0) {
-    return error('Elige un límite de bloque de una hora entre ' + rate.start + ' y ' + rate.end + '.');
+async function mutarTarifa(accion, datos, mensaje) {
+  const r = await apiPost(tarifasRuta, { accion }, datos);
+  tarifasAdministracion = undefined;
+  await cargarTarifas();
+  if (r.id) managementState.tarifas.selected = r.id;
+  dialog.hide();
+  await render();
+  feedback(mensaje);
+}
+
+function guardarTarifa(id, datos, dividir = false) {
+  const tarifa = tarifasAdministracion?.find(entry => entry.id === id);
+  if (dividir) {
+    const corte = minutes(datos.hora) - minutes(tarifa.inicio);
+    if (corte <= 0 || corte % 60 || datos.hora >= tarifa.fin) {
+      throw new Error('Selecciona un corte entre dos bloques completos de una hora.');
+    }
+    return mutarTarifa('dividir', { ...datos, id }, 'Franja dividida.');
   }
-  if (!Number.isSafeInteger(value) || value < 1 || value > 999999999) return error('Ingresa un precio por hora válido.');
-  const first = { ...rate, end: data.splitAt };
-  const second = { ...rate, start: data.splitAt, rate: value };
-  if (tariffConflict(first) || tariffConflict(second)) return error('Las franjas se cruzan con otra tarifa activa.');
-  Object.assign(rate, first);
-  demoTariffs.push({ ...second, id: nextTariffId++ });
-  saveManagement();
-  save('Franja dividida. Los precios ya se aplican a nuevas cotizaciones.');
+  const cancha = canchaPorId(tarifa?.cancha ?? datos.cancha);
+  const horas = horarioDe(cancha?.recinto, Number(datos.dia));
+  if (!horas || datos.inicio < horas[0] || datos.fin > horas[1] || datos.inicio >= datos.fin ||
+      (minutes(datos.inicio) - minutes(horas[0])) % 60 || (minutes(datos.fin) - minutes(datos.inicio)) % 60) {
+    throw new Error('La tarifa debe cubrir bloques completos de una hora dentro del horario del recinto.');
+  }
+  return mutarTarifa(id ? 'editar' : 'crear', { ...datos, id }, 'Tarifa guardada.');
 }
 
-function tariffAction(action) {
-  if (action === 'manage-new-tariff') return editTariff();
-  const match = /^manage-rate-(edit|toggle|split)-(\d+)$/.exec(action);
-  if (!match) return;
-  const rate = demoTariffs.find(rate => rate.id === Number(match[2]));
-  if (!rate) return;
-  if (match[1] === 'edit') return editTariff(rate);
-  if (match[1] === 'split') return openTariffSplit(rate);
-  const status = rate.status === 'ACTIVA' ? 'INACTIVA' : 'ACTIVA';
-  if (tariffConflict({ ...rate, status })) return feedback('La tarifa se cruza con una franja activa.');
-  rate.status = status;
-  saveManagement();
-  save('Estado de tarifa actualizado.');
+async function tariffAction(action) {
+  if (action === 'manage-new-tariff') return editarTarifa();
+  const m = /^manage-rate-(edit|split|toggle|confirm|delete)-(\d+)$/.exec(action);
+  if (!m) return;
+  const tarifa = tarifasAdministracion?.find(entry => entry.id === Number(m[2]));
+  if (!tarifa) return;
+  if (m[1] === 'edit') return editarTarifa(tarifa);
+  if (m[1] === 'split') return abrirDivisionTarifa(tarifa);
+  if (m[1] === 'confirm') return confirmarBorrado('la tarifa de ' + nombreCanchaTarifa(tarifa.cancha), 'manage-rate-delete-' + tarifa.id);
+  if (m[1] === 'delete') return mutarTarifa('borrar', { id: tarifa.id }, 'Tarifa eliminada.');
+  return mutarTarifa('estado', { id: tarifa.id, estado: tarifa.estado === 'ACTIVA' ? 'INACTIVA' : 'ACTIVA' },
+    'Estado de la tarifa actualizado.');
 }
+
+document.addEventListener('change', event => {
+  const form = event.target.form;
+  if (form?.dataset.page !== 'tariff' || event.target.name !== 'cancha') return;
+  const cancha = canchaPorId(event.target.value);
+  form.elements.modalidad.innerHTML = cancha.modalidades.map(mode => selectOption(mode.id, mode.nombre)).join('');
+});

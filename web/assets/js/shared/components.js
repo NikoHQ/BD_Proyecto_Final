@@ -1,9 +1,10 @@
 const dialog = bootstrap.Modal.getOrCreateInstance($('dialog'));
 const label = row => `#R-${row.id}`;
+const statuses = { pending: 'Pendiente', confirmed: 'Confirmada', completed: 'Completada', cancelled: 'Cancelada', maintenance: 'Mantención' };
+const statusIcons = { pending: 'hourglass-split', confirmed: 'check-circle', completed: 'check2-all', cancelled: 'x-circle', maintenance: 'tools' };
 const badge = state => `<span class="status ${state}">${icon(statusIcons[state])} ${statuses[state]}</span>`;
 const button = (action, name, opts = '') => `<button type="button" class="btn ${opts || 'btn-outline-secondary btn-sm'}" data-action="${action}">${name}</button>`;
 const details = (row, name = 'Ver') => `<button type="button" class="btn btn-outline-secondary btn-sm" data-id="${row.id}" aria-label="Ver ${label(row)}">${name}</button>`;
-const byTime = (a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start);
 
 function heading(title, description, actions = '') {
   return `<div class="page-head"><div><h1>${title}</h1>${description ? `<p>${description}</p>` : ''}</div>${actions ? `<div class="toolbar">${actions}</div>` : ''}</div>`;

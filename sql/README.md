@@ -22,19 +22,18 @@ Ejecutar **en orden**, conectado como el esquema dueño (`SGCD`), no como `SYSTE
 | 12j | `oracle/12j_pkg_consultas.sql` | `SGCD_PKG_CONSULTAS`: ingresos, reservas por cancha y clientes por reservas, con rango obligatorio y filtro de propiedad | no |
 | 13 | `oracle/13_pruebas_sgcd_19.sql` | Comprobaciones del DDL y los catálogos: objetos, coherencia, IDs automáticos, auditoría y reglas negativas. Revierte todo al final | no, limpia al final |
 | 14 | `oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de los paquetes y mantenedores, por unidad. Revierte todo al final | no, limpia al final |
+| 15 | [`oracle/15_datos_operativos_sgcd_19.sql`](oracle/15_datos_operativos_sgcd_19.sql) | Carga 16 fichas ficticias, 48 reservas, 32 pagos y 10 inscripciones para el recorrido de entrega | agrega y conserva lo existente |
 
 Las carreras entre dos conexiones no caben en un bloque anónimo: viven en
 `tests/integracion_dos_sesiones.sh` con `tests/sesion.sql`, y se ejecutan con
 `bash tests/integracion_dos_sesiones.sh`. Crean su propio fixture con `COMMIT`, lo borran al
 terminar y dejan el esquema limpio.
 
-Instalación rápida (el `NLS_LANG` es obligatorio: sin él, SQL*Plus en un contenedor sin locale
-convierte los acentos y la "·" en caracteres de reemplazo al insertar):
-
-```sh
-docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
-  sqlplus -s -L SGCD/<clave>@localhost/FREEPDB1 < sql/oracle/10_ddl_sgcd_19.sql
-```
+Para Docker local, sigue la [guía de acceso](../docs/entrega/ACCESO_DEMO.md). El instalador verifica
+el usuario `SGCD19` y sólo ejecuta `10` y `11` cuando está vacío. En un esquema ya instalado,
+`--actualizar-paquetes` recompila `12a`–`12j` y `--datos-demo` carga el lote ficticio de `15` por
+solicitud explícita. Si ejecutas los SQL por separado en SQL*Plus, usa
+`NLS_LANG=AMERICAN_AMERICA.AL32UTF8` para conservar acentos y caracteres como «·».
 
 ### Transición v3 de 23 tablas (histórica)
 

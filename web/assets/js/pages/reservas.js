@@ -14,8 +14,6 @@ const pagosCache = new Map();
 const pagosMedios = { EFECTIVO: 'Efectivo', DEBITO: 'Débito', CREDITO: 'Crédito', TRANSFERENCIA: 'Transferencia' };
 const mediosPagoApi = Object.fromEntries(Object.entries(pagosMedios).map(([api, ui]) => [ui, api]));
 
-const normalRows = () => reservasPanel().filter(row => !row.torneoId);
-const clientForReservation = row => ({ id: row.clienteId, name: row.cliente });
 
 function paymentSummary(row) {
   const pago = pagosCache.get(row.id);

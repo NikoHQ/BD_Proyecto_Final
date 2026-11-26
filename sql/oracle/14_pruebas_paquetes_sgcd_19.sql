@@ -237,10 +237,26 @@ BEGIN
         COMPROBAR(V_TOTAL = 1 AND F_ID = V_WEB, 'listar_fichas busca por RUT y pagina');
         CLOSE C;
 
-        C := SGCD_PKG_CLIENTES.ficha_detalle(999999);
-        FETCH C INTO F_ID, F_RUT, F_DV, F_NOMBRE, F_CORREO, F_FONO, F_ESTADO, F_USR;
-        COMPROBAR(C%NOTFOUND, 'ficha_detalle de un ID inexistente devuelve cero filas');
-        CLOSE C;
+        DECLARE
+            V_RESERVAS NUMBER;
+            V_VIGENTES NUMBER;
+            V_PAGADO   NUMBER;
+            V_CUENTA   NUMBER;
+            V_EVENTOS  NUMBER;
+        BEGIN
+            C := SGCD_PKG_CLIENTES.ficha_detalle(V_WEB);
+            FETCH C INTO F_ID, F_RUT, F_DV, F_NOMBRE, F_CORREO, F_FONO, F_ESTADO, F_USR,
+                         V_RESERVAS, V_VIGENTES, V_PAGADO, V_CUENTA, V_EVENTOS;
+            COMPROBAR(F_ID = V_WEB AND V_CUENTA = 1 AND V_EVENTOS >= 2
+                      AND V_RESERVAS = 0 AND V_VIGENTES = 0 AND V_PAGADO = 0,
+                      'ficha_detalle incluye resumen de actividad y auditoria');
+            CLOSE C;
+            C := SGCD_PKG_CLIENTES.ficha_detalle(999999);
+            FETCH C INTO F_ID, F_RUT, F_DV, F_NOMBRE, F_CORREO, F_FONO, F_ESTADO, F_USR,
+                         V_RESERVAS, V_VIGENTES, V_PAGADO, V_CUENTA, V_EVENTOS;
+            COMPROBAR(C%NOTFOUND, 'ficha_detalle de un ID inexistente devuelve cero filas');
+            CLOSE C;
+        END;
 
         SGCD_PKG_CLIENTES.crear_ficha(31000005, '1', 'Cliente Con Reserva', NULL, NULL,
                                       V_ADJUNTA, V_CREADA);
@@ -894,7 +910,7 @@ BEGIN
 
         INSERT INTO SGCD_TARIFAS (ID_CANCHA, ID_MODALIDAD, DIA_SEMANA, HORA_DESDE, HORA_HASTA,
                                   VIGENTE_DESDE, VIGENTE_HASTA, VALOR_HORA, ESTADO_TARIFA)
-        VALUES (1, 1, 2, '09:00', '11:00', TRUNC(SYSDATE), NULL, 15000, 'ACTIVA');
+        VALUES (1, 1, 2, '09:00', '11:00', V_MARTES, NULL, 15000, 'ACTIVA');
         ESPERAR_ERROR(
             'DECLARE V NUMBER; BEGIN V := SGCD_PKG_TARIFAS.valor_bloque(1, 1, TRUNC(SYSDATE, ''IW'') + 1, ''10:00''); END;',
             -20033, 'ante dos tarifas activas para el mismo bloque no elige una: falla');

@@ -21,7 +21,6 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
   <script defer src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0/dist/js/adminlte.min.js"></script>
   <?php foreach ([
       'shared/format', 'shared/components', 'data/api', 'data/panel-store',
-      'demo/fixtures', 'demo/store', 'demo/tournaments',
       'shared/list-view', 'pages/agenda', 'pages/reservas', 'pages/clientes', 'pages/pagos',
       'pages/recintos', 'pages/tarifas', 'pages/torneos', 'pages/reportes', 'shared/search', 'app',
   ] as $script): ?>

@@ -1,89 +1,65 @@
-# Cómo probar la demo de SGCD
+# Cómo probar SGCD con Oracle
 
-## Levantar el entorno
+## Docker local
 
-El panel se sirve con el Apache + PHP-FPM nativo ya instalado en la torre, sobre el contenedor
-`oracle-free` de siempre. No hay un segundo Oracle.
+Desde la raíz del repositorio, conserva tu `.env` si ya existe. En una instalación nueva, copia
+`.env.example` a `.env` y define `ORACLE_PASSWORD` y `SGCD_DB_PASSWORD`. Usa claves de laboratorio
+y conserva el archivo fuera de Git.
 
-1. Arranca la base: `docker start oracle-free` y espera a que `docker ps` diga `healthy`.
-2. Comprueba los servicios: `systemctl is-active httpd php-fpm`.
-3. Despliega la web: copia `web/` en `/srv/http` y recarga `php-fpm`. Los comandos exactos están
-   en [`infra/DESPLIEGUE_WEB.md`](../../infra/DESPLIEGUE_WEB.md).
-
-Si la base está vacía, carga el esquema antes de entrar:
-
-```sql
-@sql/oracle/04_ddl_v3.sql
-@sql/oracle/05_paquetes_plsql.sql
-@sql/oracle/06_catalogos_v3.sql
-```
-
-`04_ddl_v3.sql` borra y recrea todas las tablas `SGCD_*`; ejecútalo sólo en una base de
-desarrollo. En SQL*Plus, dentro del contenedor:
+Para crear o arrancar el contenedor Oracle en una instalación nueva:
 
 ```sh
-docker exec -i oracle-free sqlplus sgcd@localhost/FREEPDB1 < sql/oracle/04_ddl_v3.sql
+docker compose up -d --wait oracle
 ```
 
-> [!warning] Dos esquemas conviven hasta terminar la integración
-> La web de este repositorio todavía lee la v3 (`SGCD_CREDENCIALES`). El **modelo objetivo de 19
-> tablas** se instala y se prueba aparte, en un esquema de laboratorio, con `10`, `11` y `13`:
->
-> ```sh
-> docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
->   sqlplus -s -L SGCD19/<clave>@localhost/FREEPDB1 < sql/oracle/10_ddl_sgcd_19.sql
-> docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
->   sqlplus -s -L SGCD19/<clave>@localhost/FREEPDB1 < sql/oracle/11_catalogos_sgcd_19.sql
-> docker exec -e LANG=C.UTF-8 -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 -i oracle-free \
->   sqlplus -s -L SGCD19/<clave>@localhost/FREEPDB1 < sql/oracle/13_pruebas_sgcd_19.sql
-> ```
->
-> Sin las variables de idioma, SQL*Plus convierte los acentos en caracteres de reemplazo al insertar.
+Si `sgcd-oracle` ya está activo y saludable, pasa directo a la instalación del esquema. El script
+requiere Bash y Python 3. Crea el usuario `SGCD19` en `FREEPDB1` si falta y carga los scripts
+`10`, `11` y `12a`–`12j` si el esquema está vacío. Si el esquema ya contiene objetos, verifica
+las tablas y los paquetes. El esquema legado `SGCD` y el volumen existente se conservan.
 
-Para un entorno aislado con Docker, `docker compose up -d` levanta la aplicación y la base y publica
-ambos paneles en el puerto **8080**. La alternativa PHP local del puerto **8091** (`php -S
-127.0.0.1:8091 -t web`) sirve para probar el portal por separado.
+```sh
+bash infra/inicializar-oracle-local.sh
+docker compose up -d --no-deps app
+docker compose ps
+```
 
-## Entradas y cuentas de prueba
+La conexión local desde el host es `127.0.0.1:1521/FREEPDB1`, usuario `SGCD19`. La aplicación
+usa el servicio interno `oracle` y la clave definida en `SGCD_DB_PASSWORD`.
 
-- [Portal de clientes](http://127.0.0.1:8080/)
+Para incorporar cambios de los paquetes y mantenedores en un `SGCD19` ya instalado, recompila
+los scripts `12a`–`12j` con el siguiente comando. Las tablas y los catálogos se conservan.
+
+```sh
+bash infra/inicializar-oracle-local.sh --actualizar-paquetes
+```
+
+Si quieres el lote ficticio de clientes, reservas, pagos e inscripciones para la entrega, cárgalo
+explícitamente en la instancia de demostración. El script `15` conserva los datos previos y reconoce
+el lote si ya se cargó.
+
+```sh
+bash infra/inicializar-oracle-local.sh --datos-demo
+```
+
+## Entradas y cuentas de laboratorio
+
+- [Portal de clientes](http://127.0.0.1:8080/cliente/)
 - [Panel administrativo](http://127.0.0.1:8080/dashboardadmin/)
 
-Usa el puerto **8080** para ver los mismos torneos e inscripciones en ambos paneles y para confirmar
-solicitudes web. En la torre, Apache sirve el portal en `/` y el panel en `/dashboardadmin/`.
-
-| Usuario de prueba | Clave inicial | Permite probar |
+| Usuario | Clave inicial | Acceso |
 | --- | --- | --- |
-| `ADMIN` | `admin` | Perfil, gestión de personal y edición o anulación de pagos en la maqueta. |
-| `OPERADOR` | `Demo1234` | Perfil y pantallas operativas con las restricciones del rol. |
-| `demo` | `SGCDdemo2026` | Cliente de prueba con historial y acceso a torneos. |
-| `nuevo` | `SGCDdemo2026` | Cliente nuevo que puede enviar solicitudes. Cada reserva exige confirmación administrativa. |
+| `admin` | `admin` | Panel administrativo, confirmaciones, pagos y catálogos |
+| `demo` | `SGCDdemo2026` | Portal de clientes |
+| `nuevo` | `SGCDdemo2026` | Portal de clientes |
 
-Las cuentas de personal son credenciales **de laboratorio** sembradas por los catálogos v3; no
-reutilizarlas fuera de este equipo. El cambio de contraseña desde la interfaz exige 12 caracteres,
-pero el login acepta la clave vigente sin ese mínimo. Si alguien cambió la clave en ese mismo Oracle,
-usa la que esté guardada. Un administrador puede restablecer la de otro usuario desde **Usuarios del
-personal**. Las cuentas `demo` y `nuevo` pertenecen a la demo del portal. La recuperación con
-preguntas es tarea de backend y en la demo aparece como pendiente.
+Las credenciales iniciales vienen del catálogo de pruebas. Si ya cambiaste una clave, usa la vigente.
 
-En el avatar están **Mi perfil**, **Configuración y seguridad** y **Cerrar sesión**. El login, la
-gestión de personal y la consulta Oracle de catálogos requieren la base. Agenda, reservas de
-mostrador, clientes, pagos, recintos editables y tarifas usan datos locales del navegador. Torneos y
-solicitudes web usan archivos temporales compartidos por la instancia PHP. Las cuentas y reservas del
-portal usan sesiones PHP de demo. Usa sólo datos ficticios.
+## Recorrido
 
-## Recorrido sugerido
+1. Ingresa al portal con una cuenta cliente. Selecciona una cancha y solicita uno o más bloques de una hora.
+2. Ingresa al panel en otra sesión y confirma la solicitud. Comprueba allí la agenda y registra el pago cuando corresponda.
+3. Vuelve al portal y abre el detalle de la reserva para ver la confirmación.
+4. Consulta la programación de un torneo y prueba una inscripción si quedan cupos y el plazo está abierto.
 
-1. Agenda y buscador global por nombre, RUT o número de reserva.
-2. Reservas y Clientes con filtros, selección, formularios y paginación.
-3. Recintos → Administrar canchas → Tarifas. Revisa el horario semanal, las seis canchas de Fútbol 6,
-   la grande y una franja nocturna.
-4. Torneos → Ver equipos. Abre un plantel y revisa el nombre, capitán e integrantes.
-5. Registra un pago manual en una reserva disponible y comprueba que el detalle conserve un solo pago.
-   La cuenta `OPERADOR` permite comprobar el rechazo de confirmación web y de edición o anulación de pagos.
-
-Para probar reservas web de punta a punta e inscribir un equipo desde el portal, sigue el
-[recorrido del cliente](PORTAL_CLIENTE.md).
-
-El [mapa del UML de 19 tablas](MODELO_OBJETIVO.md) describe la base que se integrará. La demo arranca
-con el DDL v3 de transición.
+Para el despliegue en la torre, consulta [la guía de Apache y PHP-FPM](../../infra/DESPLIEGUE_WEB.md).
+Para el esquema y las pruebas, consulta [la guía de scripts Oracle](../../sql/README.md).

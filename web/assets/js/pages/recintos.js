@@ -1,187 +1,282 @@
-const siteName = key => siteRecords.find(site => site.key === key)?.name || key;
-const courtEnabled = index => !courtMeta[index]?.deleted &&
-  (courtMeta[index]?.status || 'DISPONIBLE') === 'DISPONIBLE' &&
-  siteRecords.some(site => site.key === courts[index]?.[1] && site.status === 'ACTIVO');
-const courtAvailable = index => courtEnabled(index) &&
-  (index !== largeCourt || largeCourtComponents.every(courtEnabled));
+'use strict';
+
+const recintosRuta = '/dashboardadmin/api/recintos.php';
 const courtStates = { DISPONIBLE: 'Disponible', MANTENCION: 'Mantención', INACTIVA: 'Inactiva' };
-const courtType = index => index === largeCourt ? 'COMPUESTA' : 'CANCHA';
-const courtStatus = index => courtMeta[index]?.status || 'DISPONIBLE';
+const weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const nombreDia = dia => weekdays[dia - 1];
+let modalidadesAdministracion;
+let deportesAdministracion = [];
+let horarioRecintoActual;
+let horariosRecinto = [];
+let horarioBloqueActual;
+let bloquesHorario = [];
+
+async function cargarModalidadesAdministracion() {
+  const datos = await apiGet(recintosRuta, { accion: 'modalidades' });
+  modalidadesAdministracion = datos.modalidades;
+  deportesAdministracion = datos.deportes;
+}
 
 function facilitiesDefinition(f, action) {
+  if (f.kind === 'modalities') return modalidadesDefinition(f, action);
   const sites = f.kind !== 'courts';
-  const items = sites ? siteRecords : courts.flatMap(([name, key, sport], index) => {
-    if (courtMeta[index]?.deleted) return [];
-    return [{ id: index, name, key, sport: courtModes(index).join(', '), district: siteName(key), status: courtStatus(index) }];
-  });
+  const items = sites ? panel.recintos : panel.canchas.filter(cancha => cancha.recinto === f.site);
+  const sport = item => item.modalidades?.map(mode => mode.nombre).join(', ');
+  const title = sites ? 'Recintos' : 'Canchas · ' + escapeHtml(nombreRecinto(f.site));
+  const estados = sites ? activeStates : courtStates;
   return {
-    title: sites ? 'Recintos' : 'Canchas · ' + escapeHtml(siteName(f.site)), placeholder: sites ? 'Recinto o dirección' : 'Cancha o modalidad',
+    title, placeholder: sites ? 'Recinto o dirección' : 'Cancha o modalidad',
     headers: sites ? ['Recinto', 'Dirección', 'Canchas', 'Estado'] : ['Instalación', 'Recinto', 'Modalidad', 'Estado'],
-    rows: items.filter(item => managementSearch(f.query, [item.name, item.address, item.sport]) &&
-      (!f.status || item.status === f.status) && (!f.site || item.key === f.site) && (!f.sport || courtModes(item.id).includes(f.sport))),
-    toolbar: sites ? button('manage-oracle', 'Consultar catálogo Oracle', 'btn-outline-secondary btn-sm') +
-      (siteRecords.length === 0 ? button('manage-new-site', 'Agregar recinto', 'btn-accent') : '') :
-      button('manage-sites', '← Todos los recintos') + button('manage-new-court', 'Agregar cancha', 'btn-accent'),
-    filters: managementSelect('status', 'Todos los estados', Object.entries(sites ? activeStates : courtStates), f.status) +
-      (sites ? '' : managementSelect('sport', 'Todas las modalidades', [...new Set(courts.flatMap((_, i) => courtModes(i)))].map(sport => [sport, sport]), f.sport)),
-    name: item => item.name,
-    cells: item => sites ? [item.address, courts.filter((court, i) => court[1] === item.key && !courtMeta[i]?.deleted).length, activeStates[item.status]] :
-      [siteName(item.key), item.sport, courtStates[item.status]],
-    actions: item => [action(sites ? 'courts' : 'rates', item.id, sites ? 'Administrar canchas' : 'Ver tarifas'), action('edit', item.id, 'Editar'),
-      action('history', item.id, 'Ver agenda'), action('toggle', item.id,
-        ['ACTIVO', 'DISPONIBLE'].includes(item.status) ? 'Desactivar' : 'Activar'),
-      action('ask-delete', item.id, 'Eliminar de la maqueta', true)],
+    rows: items.filter(item => managementSearch(f.query, [item.nombre, item.direccion, sport(item)]) &&
+      (!f.status || item.estado === f.status) && (!f.sport || item.modalidades?.some(mode => String(mode.id) === f.sport))),
+    toolbar: sites ? button('manage-modalities', 'Administrar modalidades') +
+      button('manage-new-site', 'Agregar recinto', 'btn-accent') :
+      button('manage-sites', '← Todos los recintos') +
+      button('manage-hours-' + f.site, 'Horario semanal') +
+      button('manage-new-court', 'Agregar cancha', 'btn-accent'),
+    filters: managementSelect('status', 'Todos los estados', Object.entries(estados), f.status) +
+      (sites ? '' : managementSelect('sport', 'Todas las modalidades',
+        panel.modalidades.map(mode => [String(mode.id), mode.nombre]), f.sport)),
+    name: item => item.nombre,
+    cells: item => sites
+      ? [item.direccion, String(panel.canchas.filter(cancha => cancha.recinto === item.id).length), estados[item.estado]]
+      : [nombreRecinto(item.recinto), sport(item) || 'Sin modalidad activa', estados[item.estado]],
+    actions: item => [
+      action(sites ? 'courts' : 'rates', item.id, sites ? 'Administrar canchas' : 'Ver tarifas'),
+      ...(sites ? [action('hours', item.id, 'Horario semanal')] : []),
+      action('edit', item.id, 'Editar'), action('history', item.id, 'Ver agenda'),
+      action('toggle', item.id, ['ACTIVO', 'DISPONIBLE'].includes(item.estado) ? 'Desactivar' : 'Activar'),
+      action('ask-delete', item.id, 'Eliminar', true)
+    ],
     details: item => {
-      const upcoming = allBookings().filter(row => row.date >= localClock()[0] && !['cancelled', 'completed', 'maintenance'].includes(row.status) &&
-        (sites ? courts[row.court][1] === item.key : row.court === item.id)).sort(byTime);
-      const fields = sites ? [
-        ['Dirección', item.address],
-        ['Estado', activeStates[item.status]], ...weekdays.map((day, i) => [day,
-          siteHours(item, i)?.join('–') || 'Cerrado'])
-      ] : [['Recinto', siteName(item.key)], ['Modalidad', item.sport], ['Tipo', courtType(item.id)],
-        ['Estado', courtStates[item.status]]];
-      return managementDetails('Detalle · ' + escapeHtml(item.name), [...fields, ['Próximas reservas', String(upcoming.length)],
-        ['Próximo bloque', upcoming[0] ? upcoming[0].date + ' · ' + upcoming[0].start : '']],
+      const fields = sites ? [['Dirección', item.direccion], ['Estado', estados[item.estado]],
+        ...weekdays.map((day, i) => [day, item.horarios?.[i + 1]?.join('–') || 'Cerrado'])]
+        : [['Recinto', nombreRecinto(item.recinto)], ['Modalidad', sport(item)], ['Tipo', item.tipo],
+          ['Estado', estados[item.estado]]];
+      const proximas = reservasPanel().filter(row => row.fecha >= localClock()[0] &&
+        ['pending', 'confirmed'].includes(row.estado) &&
+        (sites ? canchaPorId(row.canchaId)?.recinto === item.id : row.canchaId === item.id))
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.start.localeCompare(b.start));
+      return managementDetails('Detalle · ' + escapeHtml(item.nombre), [...fields,
+        ['Próximo bloque', proximas[0] ? proximas[0].fecha + ' · ' + proximas[0].start : '']],
       button('manage-' + (sites ? 'courts-' : 'rates-') + item.id, sites ? 'Administrar canchas' : 'Ver tarifas', 'btn-accent') +
-      (sites ? button('manage-hours-' + item.id, 'Editar horario semanal') : '') +
+      (sites ? button('manage-hours-' + item.id, 'Horario semanal') : '') +
       button('manage-edit-' + item.id, 'Editar ficha') + button('manage-history-' + item.id, 'Ver agenda'));
     }
   };
 }
-function modalityChoices() {
-  const catalog = ['Fútbol 6', 'Pádel dobles', 'Tenis'];
-  return [...new Set([...catalog, ...courts.flatMap((_, index) => courtModes(index))])]
-    .sort((a, b) => a.localeCompare(b, 'es'));
+
+function modalidadesDefinition(f, action) {
+  const deporte = item => deportesAdministracion.find(entry => entry.id === item.deporte)?.nombre || '';
+  return {
+    title: 'Modalidades', placeholder: 'Modalidad o deporte',
+    headers: ['Modalidad', 'Deporte', 'Máximo por equipo', 'Estado'],
+    toolbar: button('manage-sites', '← Todos los recintos') +
+      button('manage-new-modality', 'Agregar modalidad', 'btn-accent'),
+    filters: managementSelect('status', 'Todos los estados', Object.entries(activeStates), f.status),
+    rows: (modalidadesAdministracion || []).filter(item => managementSearch(f.query, [item.nombre, deporte(item)]) &&
+      (!f.status || item.estado === f.status)),
+    name: item => item.nombre,
+    cells: item => [deporte(item), String(item.maximo), activeStates[item.estado]],
+    actions: item => [action('edit', item.id, 'Editar'), action('toggle', item.id,
+      item.estado === 'ACTIVO' ? 'Desactivar' : 'Activar'), action('ask-delete', item.id, 'Eliminar', true)],
+    details: item => managementDetails('Detalle · ' + escapeHtml(item.nombre), [
+      ['Deporte', deporte(item)], ['Máximo por equipo', String(item.maximo)], ['Estado', activeStates[item.estado]]
+    ], button('manage-edit-' + item.id, 'Editar modalidad'))
+  };
 }
 
-function editCourt(item = null) {
-  const assigned = item ? courtModes(item.id) : [];
-  const choices = modalityChoices().map(mode =>
-    '<label class="form-check mb-1"><input class="form-check-input" type="checkbox" name="modalities" value="' +
-    escapeHtml(mode) + '"' + (assigned.includes(mode) ? ' checked' : '') + '> <span class="form-check-label">' +
-    escapeHtml(mode) + '</span></label>').join('');
-  managementForm(item ? 'Editar instalación' : 'Agregar cancha', 'court', item?.id ?? -1,
-    field('name', 'Nombre', item?.name, 'required maxlength="100"') +
-    (item?.id === largeCourt ? '<p class="small text-secondary">La cancha grande ocupa las canchas 1, 2 y 3.</p>' : '') +
+function abrirModalidad(item = null) {
+  const deportes = deportesAdministracion.filter(entry => entry.estado === 'ACTIVO' || entry.id === item?.deporte);
+  if (!deportes.length) return showDialog('Sin deportes disponibles', '<p>El catálogo necesita un deporte activo.</p>');
+  managementForm(item ? 'Editar modalidad' : 'Agregar modalidad', 'modalidad', item?.id ?? 0,
+    field('nombre', 'Nombre', item?.nombre, 'required maxlength="80"') +
+    editSelect('deporte', 'Deporte', deportes.map(entry => [entry.id, entry.nombre]), item?.deporte) +
+    field('maximo', 'Máximo por equipo', item?.maximo, 'type="number" required min="1" max="50" step="1"') +
+    (item ? editSelect('estado', 'Estado', Object.entries(activeStates), item.estado) : ''));
+}
+
+async function abrirCancha(item = null) {
+  const asignadas = item ? await apiGet(recintosRuta, { accion: 'cancha-modalidades', id: item.id }) : [];
+  if (!modalidadesAdministracion) await cargarModalidadesAdministracion();
+  const opciones = modalidadesAdministracion.filter(mode => mode.estado === 'ACTIVO' || asignadas.includes(mode.id));
+  if (!opciones.length) return showDialog('Sin modalidades', '<p>Agrega una modalidad activa antes de configurar la cancha.</p>');
+  const choices = opciones.map(mode => '<label class="form-check mb-1">' +
+    '<input class="form-check-input" type="checkbox" name="modalidades" value="' + mode.id + '"' +
+    (asignadas.includes(mode.id) ? ' checked' : '') + '> ' + escapeHtml(mode.nombre) +
+    (mode.estado === 'INACTIVO' ? ' (inactiva)' : '') + '</label>').join('');
+  const tipos = [
+    ['FUTBOL_6', 'Fútbol 6'], ['PADEL', 'Pádel'], ['TENIS', 'Tenis'], ['CANCHA', 'Cancha']
+  ];
+  if (item?.tipo && !tipos.some(([tipo]) => tipo === item.tipo)) tipos.unshift([item.tipo, item.tipo]);
+  const componentes = panel.componentes.filter(par => par.grande === item?.id)
+    .map(par => canchaPorId(par.pequena)?.nombre).filter(Boolean);
+  managementForm(item ? 'Editar instalación' : 'Agregar cancha', 'cancha', item?.id ?? 0,
+    field('nombre', 'Nombre', item?.nombre, 'required maxlength="100"') +
+    editSelect('tipo', 'Tipo de cancha', tipos, item?.tipo) +
+    (componentes.length ? '<p class="small text-secondary">Componentes: ' + escapeHtml(componentes.join(', ')) + '</p>' : '') +
     '<fieldset class="border rounded p-3 mb-3"><legend class="fs-6 float-none w-auto mb-1">Modalidades admitidas</legend>' +
-    '<p class="small text-secondary mb-2">Marca una o más modalidades del catálogo.</p>' + choices + '</fieldset>' +
-    editSelect('status', 'Estado', Object.entries(courtStates), item?.status || 'DISPONIBLE'));
+    choices + '</fieldset>' + editSelect('estado', 'Estado', Object.entries(courtStates), item?.estado || 'DISPONIBLE'));
 }
 
-function editSiteHours(site) {
-  const days = weekdays.map((day, index) => {
-    const hours = siteHours(site, index);
-    return '<fieldset class="row align-items-end g-2 mb-3"><legend class="h6 mb-0">' + day + '</legend>' +
-      '<div class="col-6">' + clockField('open' + index, 'Apertura', hours?.[0], { required: false }) + '</div>' +
-      '<div class="col-6">' + clockField('close' + index, 'Cierre', hours?.[1], { required: false, end: true }) + '</div></fieldset>';
+function abrirRecinto(item = null) {
+  managementForm(item ? 'Editar recinto' : 'Agregar recinto', 'recinto', item?.id ?? 0,
+    field('nombre', 'Nombre', item?.nombre, 'required maxlength="100"') +
+    field('direccion', 'Dirección', item?.direccion, 'required maxlength="150"') +
+    editSelect('estado', 'Estado', Object.entries(activeStates), item?.estado || 'ACTIVO'));
+}
+
+async function abrirHorarios(sitio) {
+  const horarios = await apiGet(recintosRuta, { accion: 'horarios', id: sitio.id });
+  horarioRecintoActual = sitio;
+  horariosRecinto = horarios;
+  const filas = weekdays.map((dia, i) => {
+    const horario = horarios.find(h => h.dia === i + 1);
+    const acciones = horario
+      ? button('manage-hours-edit-' + horario.id, 'Editar') + button('manage-blocks-' + horario.id, 'Ver bloques') +
+        button('manage-hours-confirm-' + horario.id, 'Eliminar', 'btn-outline-danger btn-sm')
+      : button('manage-hours-new-' + (i + 1), 'Agregar horario');
+    return [dia, horario ? escapeHtml(horario.apertura + '–' + horario.cierre) : 'Cerrado',
+      '<div class="d-flex gap-1 flex-wrap">' + acciones + '</div>'];
   });
-  managementForm('Horario semanal · ' + site.name, 'hours', site.id,
-    '<p class="small text-secondary">Usa HH:MM en formato de 24 horas. Para cerrar a medianoche escribe 24:00. Deja ambos campos vacíos si el recinto no abre ese día.</p>' + days.join(''));
+  showDialog('Horario semanal · ' + sitio.nombre, table(['Día', 'Horario', 'Acciones'], filas));
 }
-async function showOracleCatalog() {
-  showDialog('Catálogo Oracle', '<p id="oracle-catalog" role="status">Consultando recintos y canchas…</p>');
-  try {
-    const { recintos, canchas } = await apiGet('/dashboardadmin/api/catalogo.php');
-    const container = $('oracle-catalog');
-    if (!container) return;
-    const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-    const catalog = recintos.map(recinto => {
-      const apertura = Object.entries(recinto.horarios || {}).map(([dia, horas]) =>
-        [dias[Number(dia) - 1], horas[0], horas[1]].map(escapeHtml));
-      const instalaciones = canchas.filter(cancha => cancha.recinto === recinto.id).map(cancha => [
-        cancha.nombre, cancha.estado, cancha.modalidades.map(modalidad => modalidad.nombre).join(', ') || 'Sin modalidad',
-        String(cancha.modalidades.length)
-      ].map(escapeHtml));
-      return '<details class="border rounded p-2 mb-2"><summary>' + escapeHtml(recinto.nombre) +
-        '</summary><p class="mt-2">' + escapeHtml(recinto.direccion + ' · ' + recinto.estado) +
-        '</p>' + table(['Día', 'Abre', 'Cierra'], apertura) +
-        table(['Cancha', 'Estado', 'Modalidad', 'Modalidades'], instalaciones) + '</details>';
-    }).join('');
-    container.outerHTML = '<div id="oracle-catalog"><p class="small text-secondary">Consulta de solo lectura.</p>' +
-      (catalog || '<p>Oracle todavía no tiene recintos.</p>') + '</div>';
-  } catch {
-    const container = $('oracle-catalog');
-    if (container) container.textContent = 'No se pudo consultar el catálogo de Oracle.';
+
+function editarHorario(horario, dia = horario?.dia) {
+  managementForm('Horario · ' + nombreDia(dia), 'horario', horario?.id ?? 0,
+    '<input type="hidden" name="dia" value="' + dia + '">' +
+    clockField('apertura', 'Apertura', horario?.apertura) +
+    clockField('cierre', 'Cierre', horario?.cierre) +
+    button('manage-hours-back', 'Volver al horario semanal'));
+}
+
+async function abrirBloques(horario) {
+  const bloques = await apiGet(recintosRuta, { accion: 'bloques', id: horario.id });
+  horarioBloqueActual = horario;
+  bloquesHorario = bloques;
+  const filas = bloques.map(bloque => [escapeHtml(bloque.inicio), escapeHtml(bloque.fin),
+    button('manage-block-edit-' + bloque.id, 'Editar') +
+    button('manage-block-confirm-' + bloque.id, 'Eliminar', 'btn-outline-danger btn-sm')]);
+  showDialog('Bloques del ' + nombreDia(horario.dia).toLowerCase(),
+    '<div class="d-flex gap-2 flex-wrap mb-3">' +
+    button('manage-hours-back', '← Horario semanal') +
+    button('manage-block-new', 'Agregar bloque', 'btn-accent') + '</div>' +
+    table(['Inicio', 'Término', 'Acciones'], filas, 'Sin bloques horarios.'));
+}
+
+function editarBloque(bloque = null) {
+  managementForm(bloque ? 'Editar bloque' : 'Agregar bloque', 'bloque', bloque?.id ?? 0,
+    '<p class="small text-secondary">Cada bloque dura una hora.</p>' +
+    clockField('inicio', 'Inicio', bloque?.inicio) + clockField('fin', 'Término', bloque?.fin) +
+    button('manage-blocks-' + horarioBloqueActual.id, 'Volver a bloques'));
+}
+
+async function refrescarCatalogoAdministracion() {
+  panel.catalogoCargado = false;
+  await cargarCatalogo();
+}
+
+async function guardarInstalacion(entidad, id, datos, formData) {
+  if (entidad === 'cancha') {
+    datos.modalidades = formData.getAll('modalidades');
+    datos.recinto = managementState.instalaciones.filters.site;
+  } else if (entidad === 'horario') {
+    datos.recinto = horarioRecintoActual.id;
+  } else if (entidad === 'bloque') {
+    datos.horario = horarioBloqueActual.id;
   }
-}
-const weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-const weekdayIndex = date => (new Date(date + 'T12:00:00Z').getUTCDay() + 6) % 7;
-const courtModes = index => courtMeta[index]?.modalities || (courts[index] ? [courts[index][2]] : []);
-const siteHours = (site, day) => site?.hours ? site.hours[day] : ['08:00', '22:00'];
-function bookingWithinHours(court, date, start, end) {
-  const site = siteRecords.find(site => site.key === courts[court]?.[1]);
-  const hours = site && siteHours(site, weekdayIndex(date));
-  return Boolean(hours && start >= hours[0] && end <= hours[1]);
-}
-
-function bookingUsesHourlyBlocks(court, date, start, end) {
-  if (!bookingWithinHours(court, date, start, end) || start >= end) return false;
-  const opening = siteHours(siteRecords.find(site => site.key === courts[court][1]), weekdayIndex(date))[0];
-  return (minutes(start) - minutes(opening)) % 60 === 0 && (minutes(end) - minutes(start)) % 60 === 0;
-}
-
-function editSite(item) {
-    if (managementState.instalaciones.filters.kind === 'courts') {
-    return editCourt(item);
-  }
-  managementForm(item ? 'Editar recinto' : 'Agregar recinto', 'instalaciones', item?.id ?? 0,
-    field('name', 'Nombre', item?.name, 'required maxlength="100"') +
-    field('address', 'Dirección', item?.address, 'required maxlength="150"') +
-    editSelect('status', 'Estado', Object.entries(activeStates), item?.status || 'ACTIVO'));
-}
-
-function saveCourt(id, data, formData, error) {
-  const court = courts[id];
-  const siteKey = court?.[1] || managementState.instalaciones.filters.site;
-  const choices = modalityChoices();
-  const modalities = [...new Set(formData.getAll('modalities'))];
-  if (!modalities.length || modalities.some(mode => !choices.includes(mode))) {
-    return error('Selecciona al menos una modalidad del catálogo.');
-  }
-  if (!siteRecords.some(site => site.key === siteKey)) return error('Selecciona un recinto válido.');
-  if (!data.name || courts.some((entry, index) => index !== id && !courtMeta[index]?.deleted &&
-    entry[1] === siteKey && normalizeName(entry[0]) === normalizeName(data.name))) return error('Usa un nombre único en el recinto.');
-  if (court && (demoTariffs.some(rate => rate.court === id && !modalities.includes(rate.mode)) ||
-    allBookings().some(row => row.court === id && !modalities.includes(row.modality ||
-      (isTournament(row) ? tournaments[row.tournamentId].sport : court[2]))))) {
-    return error('Conserva las modalidades que tienen tarifas o reservas vinculadas.');
-  }
-  const index = court ? id : courts.length;
-  const primary = court && modalities.includes(court[2]) ? court[2] : modalities[0];
-  modalities.sort((left, right) => (left === primary ? -1 : right === primary ? 1 : 0));
-  courts[index] = [data.name, siteKey, primary, court?.[3] || 0, court?.[4] || 0];
-  courtMeta[index] = { status: data.status, modalities };
-  managementState.instalaciones.selected = index;
-}
-
-function saveSiteHours(id, data, error) {
-  const site = siteRecords.find(entry => entry.id === id);
-  const hours = weekdays.map((_, index) => {
-    const opening = data['open' + index];
-    const closing = data['close' + index];
-    return opening || closing ? [opening, closing] : null;
-  });
-  const invalid = hours.findIndex(pair => pair && (!validClock(pair[0]) || !validClock(pair[1], true) || pair[0] >= pair[1] || (minutes(pair[1]) - minutes(pair[0])) % 60 !== 0));
-  if (invalid !== -1) return error(weekdays[invalid] + ' debe tener un horario divisible en bloques completos de una hora.');
-  const conflict = allBookings().find(row => {
-    if (courts[row.court][1] !== site.key || row.date < localClock()[0] ||
-        !['pending', 'confirmed'].includes(row.status)) return false;
-    const pair = hours[weekdayIndex(row.date)];
-    return !pair || row.start < pair[0] || row.end > pair[1];
-  });
-  if (conflict) return error('El cambio deja fuera del horario la reserva ' + label(conflict) + '. Reprograma ese bloque primero.');
-  site.hours = hours;
-}
-
-function saveSite(id, data, error) {
-  const site = siteRecords.find(entry => entry.id === id);
-  if (!data.name || !data.address) return error('Completa nombre y dirección.');
-  if (siteRecords.some(entry => entry.id !== id && normalizeName(entry.name) === normalizeName(data.name))) return error('Ya existe un recinto con ese nombre.');
-  if (site) Object.assign(site, data);
+  const actualizado = await apiPost(recintosRuta, { accion: entidad + '-guardar' }, { ...datos, id });
+  if (entidad === 'modalidad') await cargarModalidadesAdministracion();
+  await refrescarCatalogoAdministracion();
+  if (entidad === 'horario') await abrirHorarios(horarioRecintoActual);
+  else if (entidad === 'bloque') await abrirBloques(horarioBloqueActual);
   else {
-    if (siteRecords.length) return error('La entrega trabaja con un solo recinto.');
-    const id = Math.max(0, ...siteRecords.map(entry => entry.id)) + 1;
-    siteRecords.push({ ...data, id, key: 'site-' + id, hours: weekdays.map(() => null) });
-    managementState.instalaciones.selected = id;
+    managementState.instalaciones.selected = actualizado.id;
+    dialog.hide();
   }
+  await render();
+  feedback('Cambios guardados.');
+}
+
+function confirmarBorrado(label, action, back = '') {
+  showDialog('Eliminar registro', '<p>¿Eliminar <strong>' + escapeHtml(label) + '</strong>?</p>' +
+    '<p class="text-danger small" role="alert" id="management-error"></p>' +
+    '<div class="d-flex gap-2 flex-wrap">' + back + button(action, 'Confirmar eliminación', 'btn-danger') + '</div>');
+}
+
+async function borrarInstalacion(entidad, id) {
+  await apiPost(recintosRuta, { accion: entidad + '-borrar' }, { id });
+  if (entidad === 'modalidad') await cargarModalidadesAdministracion();
+  await refrescarCatalogoAdministracion();
+  if (entidad === 'horario') await abrirHorarios(horarioRecintoActual);
+  else if (entidad === 'bloque') await abrirBloques(horarioBloqueActual);
+  else dialog.hide();
+  await render();
+  feedback('Registro eliminado.');
+}
+
+async function accionInstalacionEspecial(action) {
+  if (action === 'manage-sites') {
+    if (panelRoute().site) location.hash = 'instalaciones';
+    else {
+      Object.assign(managementState.instalaciones, { filters: {}, page: 1, selected: null });
+      await render();
+    }
+  } else if (action === 'manage-modalities') {
+    await cargarModalidadesAdministracion();
+    Object.assign(managementState.instalaciones, { filters: { kind: 'modalities' }, page: 1, selected: null });
+    await render();
+  } else if (action === 'manage-new-site') abrirRecinto();
+  else if (action === 'manage-new-court') await abrirCancha();
+  else if (action === 'manage-new-modality') abrirModalidad();
+  else if (action === 'manage-hours-back') await abrirHorarios(horarioRecintoActual);
+  else if (action === 'manage-block-new') editarBloque();
+  else {
+    const match = /^manage-(hours-(?:edit|new|confirm|delete)|blocks|block-(?:edit|confirm|delete))-(\d+)$/.exec(action);
+    if (!match) return false;
+    const [, kind, raw] = match;
+    const id = Number(raw);
+    const horario = horariosRecinto.find(entry => entry.id === id);
+    const bloque = bloquesHorario.find(entry => entry.id === id);
+    if (kind === 'hours-new') editarHorario(null, id);
+    if (kind === 'hours-edit' && horario) editarHorario(horario);
+    if (kind === 'hours-confirm' && horario) confirmarBorrado('el horario del ' + nombreDia(horario.dia).toLowerCase(),
+      'manage-hours-delete-' + id, button('manage-hours-back', 'Volver'));
+    if (kind === 'hours-delete' && horario) await borrarInstalacion('horario', id);
+    if (kind === 'blocks' && horario) await abrirBloques(horario);
+    if (kind === 'block-edit' && bloque) editarBloque(bloque);
+    if (kind === 'block-confirm' && bloque) confirmarBorrado('el bloque ' + bloque.inicio + '–' + bloque.fin,
+      'manage-block-delete-' + id, button('manage-blocks-' + horarioBloqueActual.id, 'Volver'));
+    if (kind === 'block-delete' && bloque) await borrarInstalacion('bloque', id);
+  }
+  return true;
+}
+
+async function accionInstalacion(kind, item) {
+  const { kind: vista } = managementState.instalaciones.filters;
+  const entidad = vista === 'courts' ? 'cancha' : vista === 'modalities' ? 'modalidad' : 'recinto';
+  if (kind === 'courts') location.hash = courtRoute(item);
+  if (kind === 'rates') location.hash = courtRoute(recintoPorId(item.recinto)) + '/tarifas/' + item.id;
+  if (kind === 'history') {
+    venue = String(item.recinto || item.id);
+    courtQuery = entidad === 'cancha' ? item.nombre : '';
+    location.hash = 'agenda';
+  }
+  if (kind === 'edit') {
+    if (entidad === 'cancha') return abrirCancha(item);
+    if (entidad === 'modalidad') return abrirModalidad(item);
+    return abrirRecinto(item);
+  }
+  if (kind === 'toggle') {
+    const estado = entidad === 'cancha'
+      ? (item.estado === 'DISPONIBLE' ? 'INACTIVA' : 'DISPONIBLE')
+      : (item.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO');
+    await apiPost(recintosRuta, { accion: entidad + '-estado' }, { id: item.id, estado });
+    if (entidad === 'modalidad') await cargarModalidadesAdministracion();
+    await refrescarCatalogoAdministracion();
+    await render();
+    feedback('Estado actualizado.');
+  }
+  if (kind === 'ask-delete') confirmarBorrado(item.nombre, 'manage-delete-' + item.id);
+  if (kind === 'delete') await borrarInstalacion(entidad, item.id);
 }

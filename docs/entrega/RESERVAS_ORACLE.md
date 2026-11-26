@@ -1,5 +1,8 @@
 # Contrato de reservas y pagos para PHP y Oracle
 
+Este documento recoge el diseño de integración. Para comprobar el comportamiento disponible consulta
+las APIs de reservas del portal y panel, el paquete `12g_pkg_reservas.sql` y sus pruebas. Las
+propuestas de idempotencia y los detalles del esquema de transición son referencias de diseño.
 El portal solicita por fecha y por uno o más bloques consecutivos de 60 minutos. Cada solicitud ocupa un intervalo en `RESERVA` y comienza pendiente. Un administrador confirma cada solicitud web y, cuando corresponde, registra el pago manual. Cliente, administración y torneos consultan el mismo calendario. [Mapa de las 19 tablas](MODELO_OBJETIVO.md) · [UML oficial](../modelo/uml-equipo-19/UML_objetivo.mdj)
 
 ## Entradas y salidas
@@ -14,7 +17,8 @@ El portal solicita por fecha y por uno o más bloques consecutivos de 60 minutos
 | Confirmar o cancelar | POST con ID. Confirmación requiere administrador activo y estado pendiente. Cancelación del cliente requiere propiedad y reserva futura pendiente o confirmada. Revalidar el estado en la transacción. Mostrar el resultado en ambos paneles. |
 | Pago | POST de administración con ID de reserva, importe y medio; fecha y estado controlados por el servidor. Devolver el único `PAGO` de la reserva. El portal puede mostrar su estado en el detalle propio. Confirmación de reserva y registro de pago son operaciones independientes. |
 
-En la demo, las vistas están en `web/cliente/vistas/` y las acciones de reserva en `web/cliente/reservas.php`, con `web/cliente/demo.php` como fuente temporal. `web/dashboardadmin/solicitudes-web.php` y `web/includes/portal-inbox.php` implementan la bandeja de demostración. En el modo conectado, ambas vistas de administración muestran las reservas de Oracle y el cliente ve los cambios por ID en sus consultas.
+El portal consulta `web/api/reservas.php` y el panel usa `web/dashboardadmin/api/reservas.php`.
+`web/dashboardadmin/solicitudes-web.php` lista las solicitudes pendientes en Oracle.
 
 ## Horarios, canchas y precio
 
@@ -43,7 +47,7 @@ Esta estrategia usa la PK de `RESERVA` y la secuencia del esquema y requiere imp
 - `SGCD_PKG_AUTH` y `SGCD_PKG_CONSULTAS` usan credencial y perfil del esquema anterior. Adaptarlos a `USUARIO` y sus FK de perfiles conservando los filtros de propiedad.
 - `SGCD_PKG_RESERVAS.crear_reserva` actualmente toma inicio y término libres dentro de la ventana, bloquea una cancha y consulta un solo valor de `SGCD_PKG_TARIFAS.tarifa_vigente`. Adaptarlo a la secuencia de bloques, a los conflictos de composición y a la suma por hora. La programación de `SGCD_PKG_TORNEOS` debe pasar por esa misma operación de calendario.
 - `SGCD_PKG_RESERVAS.confirmar_reserva` de transición comprueba rol y estado. Mantener la garantía con las claves de usuario/administrador objetivo y comprobar origen al confirmar solicitudes web. La cancelación requiere verificar estado y futuro para el cliente en el adaptador.
-- Usar `SGCD_RESERVAS.ID_RESERVA → RESERVA.ID_RESERVA` y `IMPORTE_ACORDADO_RESERVA → IMPORTE_ACORDADO` en las proyecciones. `BLOQUE_HORARIO` y `CANCHA_COMPONENTE` pertenecen a las 19 tablas objetivo y faltan en el DDL de 16. La instalación actual no dispone de un Oracle conectado con el modelo objetivo. [DDL de transición](../../sql/oracle/04_ddl_v3.sql) · [Paquetes de transición](../../sql/oracle/05_paquetes_plsql.sql)
+- Usar `SGCD_RESERVAS.ID_RESERVA → RESERVA.ID_RESERVA` y `IMPORTE_ACORDADO_RESERVA → IMPORTE_ACORDADO` en las proyecciones. `BLOQUE_HORARIO` y `CANCHA_COMPONENTE` pertenecen a las 19 tablas objetivo y faltan en el DDL de 16. [DDL de transición](../../sql/oracle/04_ddl_v3.sql) · [DDL vigente](../../sql/oracle/10_ddl_sgcd_19.sql)
 
 ## Aceptación
 

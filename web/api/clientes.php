@@ -15,8 +15,6 @@ require_once __DIR__ . '/../includes/api.php';
  *   POST ?accion=borrar       id                (solo ADMINISTRADOR)
  */
 
-const PERFILES_FICHA = ['ADMINISTRADOR', 'OPERADOR'];
-
 $accion = (string) ($_GET['accion'] ?? 'listar');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $entrada = apiEntrada();
@@ -27,7 +25,7 @@ if ($metodo !== 'GET' && $metodo !== 'POST') {
 if ($metodo === 'POST') {
     apiCsrf();
 }
-apiSesion($accion === 'borrar' ? ['ADMINISTRADOR'] : PERFILES_FICHA);
+apiSesion(['ADMINISTRADOR']);
 
 /** "12.345.678-5", "12345678-5" o "123456785" -> [12345678, "5"]. */
 function apiRut(array $entrada): array
@@ -63,7 +61,6 @@ function apiFicha(array $fila): array
         'telefono' => ($fila['TELEFONO_CLIENTE'] ?? '') === '' ? null : $fila['TELEFONO_CLIENTE'],
         'correo' => ($fila['CORREO_CLIENTE'] ?? '') === '' ? null : $fila['CORREO_CLIENTE'],
         'estado' => $fila['ESTADO_CLIENTE'],
-        'creado_en' => $fila['CREADO_EN_CLIENTE'],
     ];
 }
 
@@ -89,15 +86,22 @@ switch ($accion) {
         if ($metodo !== 'GET') {
             apiFail('Usa GET para listar.', 405);
         }
-        $pagina = filter_var($_GET['pagina'] ?? 1, FILTER_VALIDATE_INT) ?: 1;
-        $tamano = filter_var($_GET['tamano'] ?? 20, FILTER_VALIDATE_INT) ?: 20;
+        $pagina = apiEntero($_GET['pagina'] ?? 1, 'pagina');
+        $tamano = apiEntero($_GET['tamano'] ?? 20, 'tamano');
+        if ($tamano < 1 || $tamano > 100 || $pagina < 1 || $pagina > 1000000) {
+            apiFail('Paginación fuera de rango.', 400);
+        }
+        $texto = apiTexto($_GET, 'texto');
+        if (preg_match('/^[0-9][0-9.\\s-]*[0-9Kk]$/D', $texto)) {
+            $texto = preg_replace('/[.\\s-]/', '', $texto);
+        }
         $total = 0;
         $r = apiLlamar(
             'BEGIN SGCD_PKG_CLIENTES.listar_fichas(:texto, :estado, :desde, :tamano, :cursor, :total); END;',
             [
-                'texto' => (string) ($_GET['texto'] ?? ''),
+                'texto' => $texto,
                 'estado' => strtoupper((string) ($_GET['estado'] ?? '')),
-                'desde' => $pagina,
+                'desde' => ($pagina - 1) * $tamano + 1,
                 'tamano' => $tamano,
                 'total' => $total,
             ],
@@ -114,6 +118,9 @@ switch ($accion) {
         break;
 
     case 'ver':
+        if ($metodo !== 'GET') {
+            apiFail('Usa GET para ver.', 405);
+        }
         $id = apiId($_GET);
         apiOk(apiDetalle($id));
         break;

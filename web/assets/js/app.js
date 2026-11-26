@@ -12,9 +12,9 @@ function panelRoute() {
   const hash = location.hash.slice(1);
   const nested = /^instalaciones\/canchas\/(\d+)(?:\/tarifas\/(\d+))?$/.exec(hash);
   if (nested) {
-    const site = siteRecords.find(entry => entry.id === Number(nested[1]));
+    const site = recintoPorId(nested[1]);
     const court = nested[2] === undefined ? null : Number(nested[2]);
-    if (site && court !== null && courts[court]?.[1] === site.key && !courtMeta[court]?.deleted) {
+    if (site && court !== null && canchaPorId(court)?.recinto === site.id) {
       return { page: 'tarifas', site, court };
     }
     if (site) return { page: 'instalaciones', site };
@@ -32,7 +32,7 @@ function syncPanelRoute(route) {
   const facilities = managementState.instalaciones;
   if (page === 'instalaciones') {
     Object.assign(facilities, {
-      filters: site ? { kind: 'courts', site: site.key } : {},
+      filters: site ? { kind: 'courts', site: site.id } : {},
       selected: site ? null : facilities.lastSite ?? null,
       page: 1
     });
@@ -48,8 +48,8 @@ function syncPanelRoute(route) {
 function renderBreadcrumb({ page, site, court }) {
   const crumbs = [['Administración', '#agenda']];
   if (site) {
-    crumbs.push(['Recintos', '#instalaciones'], ['Canchas de ' + site.name, courtRoute(site)]);
-    if (page === 'tarifas') crumbs.push(['Tarifas · ' + courts[court][0], '']);
+    crumbs.push(['Recintos', '#instalaciones'], ['Canchas de ' + site.nombre, courtRoute(site)]);
+    if (page === 'tarifas') crumbs.push(['Tarifas · ' + canchaPorId(court).nombre, '']);
   } else {
     crumbs.push([pages[page][0], '']);
   }
@@ -106,6 +106,9 @@ async function render() {
       if (seq !== renderSeq) return;
       $('screen').innerHTML = reportesView();
     } else if (managementPages.includes(page)) {
+      if (page === 'clientes') await cargarClientes(seq);
+      if (page === 'tarifas') await cargarTarifas();
+      if (seq !== renderSeq) return;
       $('screen').innerHTML = managementView(page);
     }
   } catch (error) {
@@ -121,7 +124,6 @@ async function render() {
 async function iniciarPanel() {
   $('screen').innerHTML = pantallaCargando('Cargando catálogo y agenda…');
   try {
-    initDemoStore();
     await cargarCatalogo();
     await Promise.all([asegurarAgenda(date), cargarTorneos()]);
   } catch (error) {
@@ -220,7 +222,6 @@ document.addEventListener('click', async event => {
   const action = control.dataset.action || '';
   if (!action) return;
 
-  // Panel administrativo heredado (catalogo y tarifas de la maqueta).
   if (action.startsWith('manage-')) return handleManagementAction(action);
   if (action === 'retry') return iniciarPanel();
 
