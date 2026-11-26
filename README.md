@@ -4,20 +4,23 @@ Proyecto de **INF324 / ES3**. Motor de base de datos Oracle 26ai Free en Docker,
 en PL/SQL, un portal de clientes en PHP y Bootstrap y un panel de administración con AdminLTE.
 **Entrega:** 2026-11-27.
 
-**Estado hoy (2026-11-24):** el equipo cerró el **UML objetivo de 19 tablas**
+**Estado hoy (2026-11-26):** el equipo cerró el **UML objetivo de 19 tablas**
 ([UML](docs/modelo/uml-equipo-19/UML_objetivo.mdj) y [mapa de integración](docs/entrega/MODELO_OBJETIVO.md)).
-Ya están el **DDL de instalación de las 19 tablas**, los **catálogos del recinto único** y **los 7
-paquetes** del modelo (`10` a `14` de `sql/oracle/`), compilados y con **233 comprobaciones en
-verde** en un esquema limpio, más **17 comprobaciones de concurrencia** con dos sesiones reales
-(`tests/integracion_dos_sesiones.sh`). El portal de clientes y el panel administrativo están
-disponibles en modo demostración; el acceso de personal y la consulta de catálogo usan Oracle.
-**Siguiente paso:** conectar la web a los paquetes (fase 4).
+Están el **DDL de las 19 tablas**, los **catálogos del recinto único** y **los 7 paquetes**
+(`10` a `14` de `sql/oracle/`), compilados, con **239 comprobaciones de contrato** y **17 de
+concurrencia** en verde (`tests/integracion_dos_sesiones.sh`). La **fase 4 está cerrada**: agenda,
+reservas, pagos, torneos y reportes del panel y del portal leen y escriben en Oracle
+([detalle](docs/diseno/2026-11-24-unidad5-cerrada.md)). La contraparte firmó la
+[carta de validación de la problemática](docs/entrega/carta-validacion-problema-firmada.pdf)
+el 25-11-2026.
+**Siguiente paso:** datos operativos para el video y el resto de la entrega (2026-11-27).
 
 - [Acceso a la demo y credenciales de desarrollo](docs/entrega/ACCESO_DEMO.md)
 - [Guía de integración para el equipo de backend y su agente de IA](docs/entrega/INTEGRACION_BACKEND.md)
 - [UML oficial de 19 tablas y mapa desde v3](docs/entrega/MODELO_OBJETIVO.md)
 - [Recorrido del portal de clientes](docs/entrega/PORTAL_CLIENTE.md)
 - [Contrato de reservas y pagos](docs/entrega/RESERVAS_ORACLE.md) · [Contrato de torneos](docs/entrega/TORNEOS_ORACLE.md)
+- [Carta de validación firmada por la contraparte](docs/entrega/carta-validacion-problema-firmada.pdf)
 
 ---
 
@@ -29,6 +32,7 @@ disponibles en modo demostración; el acceso de personal y la consulta de catál
 | `sql/sqlite/` | Prototipo viejo en SQLite (referencia histórica, no se ejecuta en la entrega) |
 | `docs/diseno/` | El diseño vigente: decisiones, esquema, paquetes, pruebas |
 | `docs/modelo/` | Glosario de tablas, modelo UML y análisis del modelo recibido |
+| `docs/entrega/` | Contratos, guías y material de entrega, incluida la carta firmada |
 | `docs/recibido/` | Material de terceros, tal cual llegó (local, no se versiona) |
 | `docs/prompts/` | Prompts reutilizables para generar artefactos |
 | `material/` | Enunciados y plantillas del ramo (local, no se versiona) |
@@ -101,14 +105,19 @@ documento en el mismo commit.
 
 ## Qué falta
 
-**Backend terminado:** 19 tablas instaladas en `SGCD`, 7 paquetes PL/SQL, 239 pruebas de contrato,
-17 de concurrencia, y las APIs de sesión, reservas, pagos, reportes y torneos probadas por HTTP.
+**Backend terminado:** 19 tablas en `SGCD`, 7 paquetes PL/SQL, 239 pruebas de contrato, 17 de
+concurrencia y las APIs probadas por HTTP. **Fase 4 cerrada:** panel y portal conectados a Oracle,
+incluidos Reportes y el login real del portal; ver
+[`2026-11-24-unidad5-cerrada.md`](docs/diseno/2026-11-24-unidad5-cerrada.md). La carta de
+validación ya está firmada por la contraparte.
 
-1. **Fase 4, unidad 5: pantallas conectadas.** El panel y el portal todavía leen `demo/*.js` y
-   `cliente/demo.php`. El detalle por pantalla, con archivos, endpoints y aceptación, está en
-   [`docs/diseno/2026-11-24-pendiente-unidad5.md`](docs/diseno/2026-11-24-pendiente-unidad5.md).
-2. **Página Reportes** nueva en el panel, con los tres informes y selector de fechas.
-3. **Login real del portal** de clientes contra `SGCD_USUARIOS` (hoy usa `cliente/demo.php`).
-4. **Datos operativos** para el video: clientes, reservas, pagos e inscripciones de ejemplo.
-5. **Entrega:** capturas, video, láminas y ensayo de la defensa.
-6. Recuperación de contraseña por preguntas de seguridad.
+1. **Datos operativos** para el video: clientes, reservas, pagos e inscripciones de ejemplo
+   (`sql/oracle/07_datos_operativos.sql` adaptado a 19 tablas; hoy solo existe el
+   [prompt](docs/prompts/prompt-datos-operativos.md)).
+2. **Recintos, Tarifas y Clientes** siguen siendo maqueta: conectar los paquetes `12c`, `12d` y
+   `12e`, o retirarlos del menú.
+3. **Código muerto del portal anterior:** `web/cliente/demo.php`, `http.php`, `reservas.php`,
+   `torneos.php`, `portal.php`, `vistas/`, `portal-inbox.php`, `tournament-store.php`,
+   `tournaments-data.php` y `catalogo-oracle.php` (roto contra el modelo de 19 tablas).
+4. **Entrega:** capturas, video, láminas y ensayo de la defensa.
+5. Recuperación de contraseña por preguntas de seguridad (fuera del alcance acordado).

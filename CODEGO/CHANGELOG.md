@@ -917,3 +917,24 @@ los saca del índice (57 archivos). El enlace del `README` al UML pasa a la copi
 
 **Nota.** El tamaño de `.git` no baja por esto: los objetos siguen en la historia. Solo evita que
 crezca y limpia el listado del repositorio; reescribir la historia para adelgazarla no se hizo.
+
+---
+
+## 2026-11-26 — Carta de validación firmada y estado real del README
+
+**Contexto.** La contraparte firmó la carta de validación de la problemática el 25-11-2026:
+Cristian Eduardo Vial Candia, representante de Futbolito La Florida. El PDF se recibió como
+`Firma_final.pdf` y se versiona en su ruta canónica; `material/` sigue sin versionarse.
+
+**Archivos**
+
+| Ruta | Qué es |
+|---|---|
+| `docs/entrega/carta-validacion-problema-firmada.pdf` | Carta firmada por los cuatro estudiantes y la contraparte (1 página, Talca 25-11-2026) |
+| `README.md` | Estado actualizado a 2026-11-26, enlace a la carta y "Qué falta" corregido: fase 4 cerrada; quedan datos operativos, conectar o retirar Recintos/Tarifas/Clientes, limpieza del portal viejo y entrega |
+
+**Verificación.** PDF de una página cotejado contra el original: mismo texto de validación del
+SGCD y firmas manuscritas visibles. Antes del cambio, `git status` limpio y `main`/`origin/main`
+en `9a65cd9`.
+
+**Siguiente.** Datos operativos para el video y ensayo de la defensa.
