@@ -12,8 +12,7 @@
 --
 -- Este script es autocontenido y re-ejecutable: borra las tablas SGCD_* y las
 -- secuencias SGCD_SEQ_* del esquema actual (datos incluidos) antes de crearlas.
--- No toca otros esquemas. En este repositorio 04_ddl_v3.sql queda como
--- transicion historica de 23 tablas.
+-- No toca otros esquemas.
 --
 -- Decisiones aplicadas (2026-11-23):
 --   * 19 tablas. Membresias, puntos, implementos y operador salen del alcance.

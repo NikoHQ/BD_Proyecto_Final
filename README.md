@@ -46,23 +46,3 @@ Las credenciales de demostración y los comandos para detener o reiniciar el ent
 | `web/` | Portal de clientes, panel administrativo, APIs PHP, JavaScript y estilos. |
 | `docs/modelo/` | UML objetivo y fuente PlantUML. |
 | `docs/entrega/` | Guía de ejecución, recorrido de la demo y carta firmada. |
-
-## Base de datos vigente
-
-El inicializador usa los siguientes archivos del modelo objetivo:
-
-| Archivo | Propósito |
-| --- | --- |
-| `10_ddl_sgcd_19.sql` | Crea el esquema de 19 tablas, restricciones, secuencias y triggers. |
-| `11_catalogos_sgcd_19.sql` | Carga canchas, deportes, modalidades, horarios, tarifas, torneos y cuentas de laboratorio. |
-| `12a` a `12j` | Paquetes de autenticación, clientes, catálogos, tarifas, reservas, pagos, torneos y consultas. |
-| `15_datos_operativos_sgcd_19.sql` | Carga datos ficticios para recorrer la demostración. |
-| `16_rango_plantilla_torneos.sql` | Agrega y actualiza el rango de jugadores por equipo. |
-
-Los scripts `01` a `09` son versiones históricas y no se usan al iniciar el entorno actual.
-
-Para actualizar sólo los paquetes PL/SQL de una base ya creada:
-
-```sh
-bash infra/inicializar-oracle-local.sh --actualizar-paquetes
-```

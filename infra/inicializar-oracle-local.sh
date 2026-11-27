@@ -103,7 +103,7 @@ begin
 end;
 /
 SQL
-        load_scripts sql/oracle/10_ddl_sgcd_19.sql sql/oracle/16_rango_plantilla_torneos.sql sql/oracle/11_catalogos_sgcd_19.sql sql/oracle/12*.sql
+        load_scripts sql/oracle/10_ddl_sgcd_19.sql sql/oracle/11_catalogos_sgcd_19.sql sql/oracle/12*.sql
     } | run_checked sql_sgcd19
 elif "$update_packages"; then
     {
@@ -120,7 +120,7 @@ begin
 end;
 /
 SQL
-        load_scripts sql/oracle/16_rango_plantilla_torneos.sql sql/oracle/12*.sql
+        load_scripts sql/oracle/12*.sql
     } | run_checked sql_sgcd19
 fi
 
