@@ -19,5 +19,5 @@ try {
     apiOk(catalogoPanel());
 } catch (Throwable $error) {
     error_log('SGCD catalogo panel: ' . $error->getMessage());
-    apiFail('No se pudo leer el catalogo del recinto.', 503);
+    apiFail('No se pudo leer el catálogo de sucursales.', 503);
 }

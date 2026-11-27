@@ -4,7 +4,7 @@ set -euo pipefail
 
 base=${SGCD_TEST_URL:-http://127.0.0.1:8080}
 cookies=$(mktemp)
-recinto=0 modalidad=0 cancha=0 horario=0 bloque=0 tarifa=0 segunda=0
+recinto=0 modalidad=0 cancha=0 horario=0 bloque=0 tarifa=0 segunda=0 deporte_nuevo=0
 
 status() {
   curl -sS -b "$cookies" -o /dev/null -w '%{http_code}' -H "X-CSRF-Token: $csrf" \
@@ -18,6 +18,7 @@ post() {
     --data "$3" "$base/dashboardadmin/api/$1.php?accion=$2"
 }
 cleanup() {
+  if [[ $deporte_nuevo != 0 ]]; then post recintos deporte-borrar "{\"id\":$deporte_nuevo}" >/dev/null || true; fi
   for id in "$segunda" "$tarifa"; do
     if [[ $id != 0 ]]; then post tarifas borrar "{\"id\":$id}" >/dev/null || true; fi
   done
@@ -43,6 +44,12 @@ test -n "$csrf"
 
 sufijo="$(date +%s)-$$"
 deporte=$(get recintos 'accion=modalidades' | json '.data.deportes[0].id')
+deporte_nuevo=$(post recintos deporte-guardar "{\"nombre\":\"Deporte prueba $sufijo\"}" | json '.data.id')
+post recintos deporte-guardar "{\"id\":$deporte_nuevo,\"nombre\":\"Deporte editado $sufijo\",\"estado\":\"INACTIVO\"}" >/dev/null
+get recintos 'accion=modalidades' | json ".data.deportes | any(.id == $deporte_nuevo and .nombre == \"Deporte editado $sufijo\" and .estado == \"INACTIVO\")" >/dev/null
+post recintos deporte-borrar "{\"id\":$deporte_nuevo}" >/dev/null
+deporte_nuevo=0
+echo 'Deportes HTTP: alta, listado, edición y baja verificados.'
 recinto=$(post recintos recinto-guardar "{\"nombre\":\"Recinto prueba $sufijo\",\"direccion\":\"Calle de prueba\",\"estado\":\"ACTIVO\"}" | json '.data.id')
 modalidad=$(post recintos modalidad-guardar "{\"nombre\":\"Modalidad prueba $sufijo\",\"deporte\":$deporte,\"maximo\":2}" | json '.data.id')
 cancha=$(post recintos cancha-guardar "{\"nombre\":\"Cancha prueba\",\"recinto\":$recinto,\"tipo\":\"CANCHA\",\"estado\":\"DISPONIBLE\",\"modalidades\":[$modalidad]}" | json '.data.id')

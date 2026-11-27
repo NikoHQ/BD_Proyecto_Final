@@ -19,19 +19,21 @@ async function cargarModalidadesAdministracion() {
 
 function facilitiesDefinition(f, action) {
   if (f.kind === 'modalities') return modalidadesDefinition(f, action);
+  if (f.kind === 'sports') return deportesDefinition(f, action);
   const sites = f.kind !== 'courts';
   const items = sites ? panel.recintos : panel.canchas.filter(cancha => cancha.recinto === f.site);
   const sport = item => item.modalidades?.map(mode => mode.nombre).join(', ');
-  const title = sites ? 'Recintos' : 'Canchas · ' + escapeHtml(nombreRecinto(f.site));
+  const title = sites ? 'Sucursales' : 'Canchas · ' + escapeHtml(nombreRecinto(f.site));
   const estados = sites ? activeStates : courtStates;
   return {
-    title, placeholder: sites ? 'Recinto o dirección' : 'Cancha o modalidad',
-    headers: sites ? ['Recinto', 'Dirección', 'Canchas', 'Estado'] : ['Instalación', 'Recinto', 'Modalidad', 'Estado'],
+    title, placeholder: sites ? 'Sucursal o dirección' : 'Cancha o modalidad',
+    headers: sites ? ['Sucursal', 'Dirección', 'Canchas', 'Estado'] : ['Instalación', 'Sucursal', 'Modalidad', 'Estado'],
     rows: items.filter(item => managementSearch(f.query, [item.nombre, item.direccion, sport(item)]) &&
       (!f.status || item.estado === f.status) && (!f.sport || item.modalidades?.some(mode => String(mode.id) === f.sport))),
-    toolbar: sites ? button('manage-modalities', 'Administrar modalidades') +
-      button('manage-new-site', 'Agregar recinto', 'btn-accent') :
-      button('manage-sites', '← Todos los recintos') +
+    toolbar: sites ? button('manage-sports', 'Administrar deportes') +
+      button('manage-modalities', 'Administrar modalidades') +
+      button('manage-new-site', 'Agregar sucursal', 'btn-accent') :
+      button('manage-sites', '← Todas las sucursales') +
       button('manage-hours-' + f.site, 'Horario semanal') +
       button('manage-new-court', 'Agregar cancha', 'btn-accent'),
     filters: managementSelect('status', 'Todos los estados', Object.entries(estados), f.status) +
@@ -51,7 +53,7 @@ function facilitiesDefinition(f, action) {
     details: item => {
       const fields = sites ? [['Dirección', item.direccion], ['Estado', estados[item.estado]],
         ...weekdays.map((day, i) => [day, item.horarios?.[i + 1]?.join('–') || 'Cerrado'])]
-        : [['Recinto', nombreRecinto(item.recinto)], ['Modalidad', sport(item)], ['Tipo', item.tipo],
+        : [['Sucursal', nombreRecinto(item.recinto)], ['Modalidad', sport(item)], ['Tipo', item.tipo],
           ['Estado', estados[item.estado]]];
       const proximas = reservasPanel().filter(row => row.fecha >= localClock()[0] &&
         ['pending', 'confirmed'].includes(row.estado) &&
@@ -71,7 +73,7 @@ function modalidadesDefinition(f, action) {
   return {
     title: 'Modalidades', placeholder: 'Modalidad o deporte',
     headers: ['Modalidad', 'Deporte', 'Máximo por equipo', 'Estado'],
-    toolbar: button('manage-sites', '← Todos los recintos') +
+    toolbar: button('manage-sites', '← Todas las sucursales') +
       button('manage-new-modality', 'Agregar modalidad', 'btn-accent'),
     filters: managementSelect('status', 'Todos los estados', Object.entries(activeStates), f.status),
     rows: (modalidadesAdministracion || []).filter(item => managementSearch(f.query, [item.nombre, deporte(item)]) &&
@@ -84,6 +86,31 @@ function modalidadesDefinition(f, action) {
       ['Deporte', deporte(item)], ['Jugadores por equipo', `${item.minimo}–${item.maximo}`], ['Estado', activeStates[item.estado]]
     ], button('manage-edit-' + item.id, 'Editar modalidad'))
   };
+}
+
+function deportesDefinition(f, action) {
+  return {
+    title: 'Deportes', placeholder: 'Nombre del deporte',
+    headers: ['Deporte', 'Estado'],
+    toolbar: button('manage-sites', '← Todas las sucursales') +
+      button('manage-new-sport', 'Agregar deporte', 'btn-accent'),
+    filters: managementSelect('status', 'Todos los estados', Object.entries(activeStates), f.status),
+    rows: (deportesAdministracion || []).filter(item =>
+      managementSearch(f.query, [item.nombre]) && (!f.status || item.estado === f.status)),
+    name: item => item.nombre,
+    cells: item => [activeStates[item.estado]],
+    actions: item => [action('edit', item.id, 'Editar'), action('toggle', item.id,
+      item.estado === 'ACTIVO' ? 'Desactivar' : 'Activar'), action('ask-delete', item.id, 'Eliminar', true)],
+    details: item => managementDetails('Detalle · ' + escapeHtml(item.nombre), [
+      ['Estado', activeStates[item.estado]]
+    ], button('manage-edit-' + item.id, 'Editar deporte'))
+  };
+}
+
+function abrirDeporte(item = null) {
+  managementForm(item ? 'Editar deporte' : 'Agregar deporte', 'deporte', item?.id ?? 0,
+    field('nombre', 'Nombre', item?.nombre, 'required maxlength="50"') +
+    (item ? editSelect('estado', 'Estado', Object.entries(activeStates), item.estado) : ''));
 }
 
 function abrirModalidad(item = null) {
@@ -121,7 +148,7 @@ async function abrirCancha(item = null) {
 }
 
 function abrirRecinto(item = null) {
-  managementForm(item ? 'Editar recinto' : 'Agregar recinto', 'recinto', item?.id ?? 0,
+  managementForm(item ? 'Editar sucursal' : 'Agregar sucursal', 'recinto', item?.id ?? 0,
     field('nombre', 'Nombre', item?.nombre, 'required maxlength="100"') +
     field('direccion', 'Dirección', item?.direccion, 'required maxlength="150"') +
     editSelect('estado', 'Estado', Object.entries(activeStates), item?.estado || 'ACTIVO'));
@@ -187,7 +214,7 @@ async function guardarInstalacion(entidad, id, datos, formData) {
     datos.horario = horarioBloqueActual.id;
   }
   const actualizado = await apiPost(recintosRuta, { accion: entidad + '-guardar' }, { ...datos, id });
-  if (entidad === 'modalidad') await cargarModalidadesAdministracion();
+  if (entidad === 'modalidad' || entidad === 'deporte') await cargarModalidadesAdministracion();
   await refrescarCatalogoAdministracion();
   if (entidad === 'horario') await abrirHorarios(horarioRecintoActual);
   else if (entidad === 'bloque') await abrirBloques(horarioBloqueActual);
@@ -207,7 +234,7 @@ function confirmarBorrado(label, action, back = '') {
 
 async function borrarInstalacion(entidad, id) {
   await apiPost(recintosRuta, { accion: entidad + '-borrar' }, { id });
-  if (entidad === 'modalidad') await cargarModalidadesAdministracion();
+  if (entidad === 'modalidad' || entidad === 'deporte') await cargarModalidadesAdministracion();
   await refrescarCatalogoAdministracion();
   if (entidad === 'horario') await abrirHorarios(horarioRecintoActual);
   else if (entidad === 'bloque') await abrirBloques(horarioBloqueActual);
@@ -227,7 +254,12 @@ async function accionInstalacionEspecial(action) {
     await cargarModalidadesAdministracion();
     Object.assign(managementState.instalaciones, { filters: { kind: 'modalities' }, page: 1, selected: null });
     await render();
+  } else if (action === 'manage-sports') {
+    await cargarModalidadesAdministracion();
+    Object.assign(managementState.instalaciones, { filters: { kind: 'sports' }, page: 1, selected: null });
+    await render();
   } else if (action === 'manage-new-site') abrirRecinto();
+  else if (action === 'manage-new-sport') abrirDeporte();
   else if (action === 'manage-new-court') await abrirCancha();
   else if (action === 'manage-new-modality') abrirModalidad();
   else if (action === 'manage-hours-back') await abrirHorarios(horarioRecintoActual);
@@ -255,7 +287,8 @@ async function accionInstalacionEspecial(action) {
 
 async function accionInstalacion(kind, item) {
   const { kind: vista } = managementState.instalaciones.filters;
-  const entidad = vista === 'courts' ? 'cancha' : vista === 'modalities' ? 'modalidad' : 'recinto';
+  const entidad = vista === 'courts' ? 'cancha' : vista === 'modalities' ? 'modalidad'
+    : vista === 'sports' ? 'deporte' : 'recinto';
   if (kind === 'courts') location.hash = courtRoute(item);
   if (kind === 'rates') location.hash = courtRoute(recintoPorId(item.recinto)) + '/tarifas/' + item.id;
   if (kind === 'history') {
@@ -266,6 +299,7 @@ async function accionInstalacion(kind, item) {
   if (kind === 'edit') {
     if (entidad === 'cancha') return abrirCancha(item);
     if (entidad === 'modalidad') return abrirModalidad(item);
+    if (entidad === 'deporte') return abrirDeporte(item);
     return abrirRecinto(item);
   }
   if (kind === 'toggle') {
@@ -273,7 +307,7 @@ async function accionInstalacion(kind, item) {
       ? (item.estado === 'DISPONIBLE' ? 'INACTIVA' : 'DISPONIBLE')
       : (item.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO');
     await apiPost(recintosRuta, { accion: entidad + '-estado' }, { id: item.id, estado });
-    if (entidad === 'modalidad') await cargarModalidadesAdministracion();
+    if (entidad === 'modalidad' || entidad === 'deporte') await cargarModalidadesAdministracion();
     await refrescarCatalogoAdministracion();
     await render();
     feedback('Estado actualizado.');

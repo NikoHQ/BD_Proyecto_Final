@@ -5,7 +5,7 @@ const pages = {
   agenda: ['Agenda', 'calendar3'], reservas: ['Reservas', 'journal-check'],
   clientes: ['Clientes', 'people'], pagos: ['Pagos', 'credit-card'],
   torneos: ['Torneos', 'trophy'], reportes: ['Reportes', 'bar-chart'],
-  instalaciones: ['Recintos', 'geo-alt'], tarifas: ['Tarifas', 'tags']
+  instalaciones: ['Sucursales', 'geo-alt'], tarifas: ['Tarifas', 'tags']
 };
 
 function panelRoute() {
@@ -48,8 +48,11 @@ function syncPanelRoute(route) {
 function renderBreadcrumb({ page, site, court }) {
   const crumbs = [['Administración', '#agenda']];
   if (site) {
-    crumbs.push(['Recintos', '#instalaciones'], ['Canchas de ' + site.nombre, courtRoute(site)]);
+    crumbs.push(['Sucursales', '#instalaciones'], ['Canchas de ' + site.nombre, courtRoute(site)]);
     if (page === 'tarifas') crumbs.push(['Tarifas · ' + canchaPorId(court).nombre, '']);
+  } else if (page === 'instalaciones' && ['modalities', 'sports'].includes(managementState.instalaciones.filters.kind)) {
+    crumbs.push(['Sucursales', '#instalaciones']);
+    crumbs.push([managementState.instalaciones.filters.kind === 'sports' ? 'Deportes' : 'Modalidades', '']);
   } else {
     crumbs.push([pages[page][0], '']);
   }

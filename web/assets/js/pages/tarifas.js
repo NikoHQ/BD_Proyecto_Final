@@ -33,7 +33,7 @@ function accionesTarifa(tarifa) {
 function tariffsDefinition(f) {
   const filteredCourt = String(f.court ?? '');
   return {
-    title: 'Tarifas', placeholder: 'Cancha, recinto, modalidad o día',
+    title: 'Tarifas', placeholder: 'Cancha, sucursal, modalidad o día',
     description: 'Configura el valor por hora de cada franja.',
     headers: ['Tarifa', 'Modalidad', 'Día', 'Franja', 'Valor por hora', 'Estado'],
     toolbar: button('manage-new-tariff', 'Nueva tarifa', 'btn-accent'),
@@ -53,7 +53,7 @@ function tariffsDefinition(f) {
       money.format(tarifa.valor), estadosTarifa[tarifa.estado]],
     actions: accionesTarifa,
     details: tarifa => managementDetails('Detalle de tarifa', [
-      ['Recinto', nombreRecinto(canchaPorId(tarifa.cancha)?.recinto)], ['Cancha', nombreCanchaTarifa(tarifa.cancha)],
+      ['Sucursal', nombreRecinto(canchaPorId(tarifa.cancha)?.recinto)], ['Cancha', nombreCanchaTarifa(tarifa.cancha)],
       ['Modalidad', nombreModalidadTarifa(tarifa.modalidad)], ['Día', nombreDia(tarifa.dia)],
       ['Franja', franjaTarifa(tarifa)], ['Vigente desde', tarifa.desde], ['Vigente hasta', tarifa.hasta],
       ['Por hora', money.format(tarifa.valor)], ['Estado', estadosTarifa[tarifa.estado]]
@@ -116,7 +116,7 @@ function guardarTarifa(id, datos, dividir = false) {
   const horas = horarioDe(cancha?.recinto, Number(datos.dia));
   if (!horas || datos.inicio < horas[0] || datos.fin > horas[1] || datos.inicio >= datos.fin ||
       (minutes(datos.inicio) - minutes(horas[0])) % 60 || (minutes(datos.fin) - minutes(datos.inicio)) % 60) {
-    throw new Error('La tarifa debe cubrir bloques completos de una hora dentro del horario del recinto.');
+    throw new Error('La tarifa debe cubrir bloques completos de una hora dentro del horario de la sucursal.');
   }
   return mutarTarifa(id ? 'editar' : 'crear', { ...datos, id }, 'Tarifa guardada.');
 }

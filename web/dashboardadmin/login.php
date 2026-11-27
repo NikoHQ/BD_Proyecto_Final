@@ -42,7 +42,7 @@ try {
         <h1 class="h4 mb-3"><?= $recover ? 'Recuperar contraseña' : 'Iniciar sesión' ?></h1>
         <?php if ($error): ?><p class="alert alert-danger" role="alert"><?= esc($error) ?></p><?php endif; ?>
         <?php if ($recover): ?>
-          <p class="alert alert-info">Solicita el restablecimiento de tu contraseña a un administrador del recinto.</p>
+          <p class="alert alert-info">Solicita el restablecimiento de tu contraseña a un administrador de la sucursal.</p>
         <?php else: ?>
         <form method="post" action="login.php">
           <?= csrfField() ?>

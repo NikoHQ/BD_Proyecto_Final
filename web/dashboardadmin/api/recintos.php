@@ -62,6 +62,7 @@ $id = apiEntero($entrada['id'] ?? 0, 'id');
 [$entidad, $operacion] = array_pad(explode('-', $accion, 2), 2, '');
 $eliminar = [
     'recinto' => 'SGCD_BORRAR_RECINTO',
+    'deporte' => 'SGCD_BORRAR_DEPORTE',
     'modalidad' => 'SGCD_BORRAR_MODALIDAD',
     'horario' => 'SGCD_BORRAR_HORARIO',
     'bloque' => 'SGCD_BORRAR_BLOQUE_HORARIO',
@@ -104,6 +105,10 @@ if ($operacion === 'estado') {
             SELECT * INTO r FROM SGCD_MODALIDADES WHERE ID_MODALIDAD = :id FOR UPDATE;
             SGCD_ACTUALIZAR_MODALIDAD(:id, r.ID_DEPORTE, r.MIN_JUGADORES_POR_EQUIPO, r.MAX_JUGADORES_POR_EQUIPO, r.NOMBRE_MODALIDAD, :estado);
             EXCEPTION WHEN NO_DATA_FOUND THEN RAISE_APPLICATION_ERROR(-20832, \'La modalidad no existe\'); END;',
+        'deporte' => 'DECLARE r SGCD_DEPORTES%ROWTYPE; BEGIN
+            SELECT * INTO r FROM SGCD_DEPORTES WHERE ID_DEPORTE = :id FOR UPDATE;
+            SGCD_ACTUALIZAR_DEPORTE(:id, r.NOMBRE_DEPORTE, :estado);
+            EXCEPTION WHEN NO_DATA_FOUND THEN RAISE_APPLICATION_ERROR(-20832, \'El deporte no existe\'); END;',
         default => null,
     };
     if ($llamada === null) {
@@ -124,6 +129,16 @@ switch ($entidad) {
         $binds += ['nombre' => $nombre, 'direccion' => trim((string) ($entrada['direccion'] ?? '')), 'estado' => $estado];
         $llamada = $id ? 'SGCD_ACTUALIZAR_RECINTO(:id, :nombre, :direccion, :estado)'
             : 'SGCD_CREAR_RECINTO(:nombre, :direccion, :estado, :id)';
+        break;
+
+    case 'deporte':
+        $binds['nombre'] = $nombre;
+        if ($id) {
+            $binds['estado'] = $estado;
+            $llamada = 'SGCD_ACTUALIZAR_DEPORTE(:id, :nombre, :estado)';
+        } else {
+            $llamada = 'SGCD_CREAR_DEPORTE(:nombre, :id)';
+        }
         break;
 
     case 'modalidad':

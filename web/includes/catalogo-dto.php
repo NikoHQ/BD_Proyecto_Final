@@ -20,10 +20,8 @@ function catalogoFilas(string $sql, array $binds = []): array
 function catalogoPanel(): array
 {
     $recintos = [];
-    foreach (catalogoFilas(
-        'SELECT ID_RECINTO, NOMBRE_RECINTO, DIRECCION_RECINTO, ESTADO_RECINTO
-           FROM SGCD_RECINTOS ORDER BY ID_RECINTO'
-    ) as $fila) {
+    $filasRecintos = apiLlamar('BEGIN SGCD_LISTAR_RECINTOS(:cursor); END;', [], false, 'cursor')['filas'];
+    foreach ($filasRecintos as $fila) {
         $recintos[(int) $fila['ID_RECINTO']] = [
             'id' => (int) $fila['ID_RECINTO'],
             'nombre' => $fila['NOMBRE_RECINTO'],

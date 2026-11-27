@@ -542,6 +542,7 @@ BEGIN
         L_USUARIO  NUMBER;
         L_NOMBRE   VARCHAR2(100);
         L_ESTADO   VARCHAR2(15);
+        L_LOGIN    VARCHAR2(50);
     BEGIN
         SGCD_CREAR_HORARIO(1, 1, '08:00', '22:00', V_HORARIO);
         SELECT COUNT(*) INTO V_CANTIDAD FROM SGCD_HORARIOS WHERE ID_RECINTO = 1;
@@ -595,9 +596,9 @@ BEGIN
         SGCD_LISTAR_ADMINISTRADORES(C);
         V_CANTIDAD := 0;
         LOOP
-            FETCH C INTO L_ID, L_USUARIO, L_NOMBRE, L_ESTADO;
+            FETCH C INTO L_ID, L_USUARIO, L_NOMBRE, L_ESTADO, L_LOGIN;
             EXIT WHEN C%NOTFOUND;
-            IF L_ID = V_ADMIN THEN
+            IF L_ID = V_ADMIN AND L_LOGIN = 'cta_admin_nuevo' THEN
                 V_CANTIDAD := 1;
             END IF;
         END LOOP;
@@ -1886,6 +1887,70 @@ BEGIN
         COMPROBAR(C%NOTFOUND, 'el filtro devuelve una sola fila');
         CLOSE C;
     END;
+
+    ROLLBACK;
+    DBMS_OUTPUT.PUT_LINE('---');
+    IF V_FALLAS = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: todas las comprobaciones pasaron');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('RESULTADO: ' || V_FALLAS || ' fallas');
+    END IF;
+END;
+/
+
+
+-- =====================================================================
+-- UNIDAD 11: mantenedor de recintos (etiqueta de interfaz: Sucursales)
+-- =====================================================================
+DECLARE
+    V_FALLAS NUMBER := 0;
+    V_ID NUMBER;
+    V_CANTIDAD NUMBER;
+    V_ENCONTRADA BOOLEAN := FALSE;
+    V_NOMBRE SGCD_RECINTOS.NOMBRE_RECINTO%TYPE;
+    V_DIRECCION SGCD_RECINTOS.DIRECCION_RECINTO%TYPE;
+    V_ESTADO SGCD_RECINTOS.ESTADO_RECINTO%TYPE;
+    L_ID SGCD_RECINTOS.ID_RECINTO%TYPE;
+    L_NOMBRE SGCD_RECINTOS.NOMBRE_RECINTO%TYPE;
+    L_DIRECCION SGCD_RECINTOS.DIRECCION_RECINTO%TYPE;
+    L_ESTADO SGCD_RECINTOS.ESTADO_RECINTO%TYPE;
+    C SYS_REFCURSOR;
+
+    PROCEDURE COMPROBAR(P_CONDICION BOOLEAN, P_TEXTO VARCHAR2) IS
+    BEGIN
+        IF P_CONDICION THEN
+            DBMS_OUTPUT.PUT_LINE('OK    ' || P_TEXTO);
+        ELSE
+            V_FALLAS := V_FALLAS + 1;
+            DBMS_OUTPUT.PUT_LINE('FALLA ' || P_TEXTO);
+        END IF;
+    END;
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('--- UNIDAD 11: mantenedor de recintos');
+
+    SGCD_CREAR_RECINTO('Sucursal Prueba Mantenedor', 'Direccion de prueba', 'ACTIVO', V_ID);
+    SGCD_LISTAR_RECINTOS(C);
+    LOOP
+        FETCH C INTO L_ID, L_NOMBRE, L_DIRECCION, L_ESTADO;
+        EXIT WHEN C%NOTFOUND;
+        IF L_ID = V_ID AND L_NOMBRE = 'Sucursal Prueba Mantenedor'
+           AND L_DIRECCION = 'Direccion de prueba' AND L_ESTADO = 'ACTIVO' THEN
+            V_ENCONTRADA := TRUE;
+        END IF;
+    END LOOP;
+    CLOSE C;
+    COMPROBAR(V_ENCONTRADA, 'listar recintos devuelve la sucursal creada');
+
+    SGCD_ACTUALIZAR_RECINTO(V_ID, 'Sucursal Prueba Editada', 'Nueva direccion de prueba', 'INACTIVO');
+    SELECT NOMBRE_RECINTO, DIRECCION_RECINTO, ESTADO_RECINTO
+    INTO V_NOMBRE, V_DIRECCION, V_ESTADO
+    FROM SGCD_RECINTOS WHERE ID_RECINTO = V_ID;
+    COMPROBAR(V_NOMBRE = 'Sucursal Prueba Editada' AND V_DIRECCION = 'Nueva direccion de prueba'
+              AND V_ESTADO = 'INACTIVO', 'actualizar recinto cambia nombre, direccion y estado');
+
+    SGCD_BORRAR_RECINTO(V_ID);
+    SELECT COUNT(*) INTO V_CANTIDAD FROM SGCD_RECINTOS WHERE ID_RECINTO = V_ID;
+    COMPROBAR(V_CANTIDAD = 0, 'borrar recinto elimina la sucursal sin dependencias');
 
     ROLLBACK;
     DBMS_OUTPUT.PUT_LINE('---');
