@@ -104,6 +104,11 @@ Para cargar los datos ficticios de la demostración en el esquema local, ejecuta
 `bash infra/inicializar-oracle-local.sh --datos-demo`. Consulta el recorrido y sus fechas de
 referencia en [Datos operativos de la demo](sql/README.md#datos-operativos-de-la-demo).
 
+Para volver a la foto curada después de un ensayo, `bash infra/reiniciar-demo.sh` reconstruye
+el esquema (tablas, catálogos, paquetes y datos del script 15) en un solo paso. Pide escribir
+`REINICIAR`; con `--si` no pregunta. Acepta `CONT`, `DBUSER`, `DBPASS` y `DBSVC` para apuntar
+a otra instalación.
+
 ## Cómo se decide
 
 Las decisiones de diseño están fechadas en [`docs/diseno/`](docs/diseno/) y su historial en
