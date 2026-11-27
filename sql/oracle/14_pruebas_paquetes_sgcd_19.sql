@@ -367,6 +367,7 @@ BEGIN
         V_CANCHA    NUMBER;
         V_CANTIDAD  NUMBER;
         V_ENCONTRADA BOOLEAN := FALSE;
+        V_MIN       NUMBER;
         V_MAX       NUMBER;
         V_NOMBRE    VARCHAR2(80);
         V_ESTADO    VARCHAR2(10);
@@ -374,6 +375,7 @@ BEGIN
         -- columnas de los cursores
         L_ID        NUMBER;
         L_PADRE     NUMBER;
+        L_MIN       NUMBER;
         L_MAX       NUMBER;
         L_NOMBRE    VARCHAR2(100);
         L_ESTADO    VARCHAR2(15);
@@ -382,20 +384,24 @@ BEGIN
         SELECT COUNT(*) INTO V_CANTIDAD FROM SGCD_DEPORTES WHERE NOMBRE_DEPORTE = 'Futsal';
         COMPROBAR(V_DEPORTE > 3 AND V_CANTIDAD = 1, 'alta de deporte con ID de la secuencia');
 
-        SGCD_CREAR_MODALIDAD(V_DEPORTE, 12, 'Futsal 5', V_MODALIDAD);
-        SELECT MAX_JUGADORES_POR_EQUIPO INTO V_MAX FROM SGCD_MODALIDADES WHERE ID_MODALIDAD = V_MODALIDAD;
-        COMPROBAR(V_MODALIDAD > 3 AND V_MAX = 12, 'alta de modalidad con su maximo de jugadores');
-
-        SGCD_ACTUALIZAR_MODALIDAD(V_MODALIDAD, V_DEPORTE, 14, 'Futsal 5 reducido', 'INACTIVO');
-        SELECT NOMBRE_MODALIDAD, ESTADO_MODALIDAD, MAX_JUGADORES_POR_EQUIPO
-        INTO   V_NOMBRE, V_ESTADO, V_MAX
+        SGCD_CREAR_MODALIDAD(V_DEPORTE, 5, 12, 'Futsal 5', V_MODALIDAD);
+        SELECT MIN_JUGADORES_POR_EQUIPO, MAX_JUGADORES_POR_EQUIPO
+        INTO   V_MIN, V_MAX
         FROM   SGCD_MODALIDADES WHERE ID_MODALIDAD = V_MODALIDAD;
-        COMPROBAR(V_NOMBRE = 'Futsal 5 reducido' AND V_ESTADO = 'INACTIVO' AND V_MAX = 14,
-                  'actualizar modalidad cambia nombre, estado y maximo');
+        COMPROBAR(V_MODALIDAD > 3 AND V_MIN = 5 AND V_MAX = 12,
+                  'alta de modalidad con su rango de jugadores');
+
+        SGCD_ACTUALIZAR_MODALIDAD(V_MODALIDAD, V_DEPORTE, 1, 14, 'Futsal 5 reducido', 'INACTIVO');
+        SELECT NOMBRE_MODALIDAD, ESTADO_MODALIDAD, MIN_JUGADORES_POR_EQUIPO, MAX_JUGADORES_POR_EQUIPO
+        INTO   V_NOMBRE, V_ESTADO, V_MIN, V_MAX
+        FROM   SGCD_MODALIDADES WHERE ID_MODALIDAD = V_MODALIDAD;
+        COMPROBAR(V_NOMBRE = 'Futsal 5 reducido' AND V_ESTADO = 'INACTIVO'
+                  AND V_MIN = 1 AND V_MAX = 14,
+                  'actualizar modalidad cambia nombre, estado y rango');
 
         SGCD_LISTAR_MODALIDADES(C);
         LOOP
-            FETCH C INTO L_ID, L_PADRE, L_MAX, L_NOMBRE, L_ESTADO;
+            FETCH C INTO L_ID, L_PADRE, L_MIN, L_MAX, L_NOMBRE, L_ESTADO;
             EXIT WHEN C%NOTFOUND;
             IF L_ID = V_MODALIDAD THEN
                 V_ENCONTRADA := TRUE;
@@ -439,10 +445,10 @@ BEGIN
         'DECLARE V NUMBER; BEGIN SGCD_CREAR_DEPORTE(''Balonmano'', V); SGCD_CREAR_DEPORTE(''Balonmano'', V); END;',
         -20833, 'rechaza un deporte con nombre repetido');
     ESPERAR_ERROR(
-        'DECLARE V NUMBER; BEGIN SGCD_CREAR_MODALIDAD(1, 0, ''Sin jugadores'', V); END;',
-        -20831, 'rechaza una modalidad con maximo de jugadores en cero');
+        'DECLARE V NUMBER; BEGIN SGCD_CREAR_MODALIDAD(1, 0, 5, ''Sin jugadores'', V); END;',
+        -20831, 'rechaza una modalidad con minimo de jugadores en cero');
     ESPERAR_ERROR(
-        'DECLARE V NUMBER; BEGIN SGCD_CREAR_MODALIDAD(999, 5, ''Deporte Fantasma'', V); END;',
+        'DECLARE V NUMBER; BEGIN SGCD_CREAR_MODALIDAD(999, 1, 5, ''Deporte Fantasma'', V); END;',
         -2291, 'el padre inexistente lo rechaza la FK, no el procedimiento (a traducir en el API)');
     ESPERAR_ERROR(
         'DECLARE V NUMBER; BEGIN SGCD_CREAR_CANCHA(1, ''Cancha Duplicada'', ''FUTBOL_6'', ''DISPONIBLE'', V); SGCD_CREAR_CANCHA(1, ''Cancha Duplicada'', ''FUTBOL_6'', ''DISPONIBLE'', V); END;',
@@ -1502,10 +1508,10 @@ BEGIN
         C           SYS_REFCURSOR;
         L1 NUMBER; L2 VARCHAR2(100); L3 NUMBER; L4 VARCHAR2(100);
         L5 DATE; L6 DATE; L7 NUMBER; L8 NUMBER; L9 NUMBER;
-        L10 VARCHAR2(15); L11 NUMBER;
+        L9B NUMBER; L10 VARCHAR2(15); L11 NUMBER;
         M1 NUMBER; M2 NUMBER; M3 VARCHAR2(100); M4 VARCHAR2(100);
         M5 NUMBER; M6 DATE; M7 VARCHAR2(15); M8 NUMBER; M9 VARCHAR2(100);
-        J1 NUMBER; J2 VARCHAR2(20); J3 VARCHAR2(100);
+        J1 NUMBER; J2 VARCHAR2(20); J3 VARCHAR2(100); J4 NUMBER;
         V_ID_TORNEO NUMBER;
         V_ORIGEN    VARCHAR2(15);
         V_ESTADO_RES VARCHAR2(15);
@@ -1666,7 +1672,7 @@ BEGIN
         V_CUENTA := 0;
         SGCD_PKG_TORNEOS.listar_torneos(1, 'PLANIFICADO', NULL, C);
         LOOP
-            FETCH C INTO L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11;
+            FETCH C INTO L1, L2, L3, L4, L5, L6, L7, L8, L9, L9B, L10, L11;
             EXIT WHEN C%NOTFOUND;
             V_CUENTA := V_CUENTA + 1;
         END LOOP;
@@ -1686,7 +1692,7 @@ BEGIN
         V_CUENTA := 0;
         SGCD_PKG_TORNEOS.jugadores_inscripcion(V_I3, C);
         LOOP
-            FETCH C INTO J1, J2, J3;
+            FETCH C INTO J1, J2, J3, J4;
             EXIT WHEN C%NOTFOUND;
             V_CUENTA := V_CUENTA + 1;
         END LOOP;
@@ -1749,7 +1755,7 @@ BEGIN
         V_R2        NUMBER;
         V_R3        NUMBER;
         V_R4        NUMBER;
-        V_MARTES    DATE := TRUNC(SYSDATE, 'IW') + 8;
+        V_MARTES    DATE := TRUNC(SYSDATE, 'IW') + 15;
         V_FILAS     NUMBER;
         V_RESERVAS  NUMBER;
         V_HORAS     NUMBER;
@@ -1757,6 +1763,8 @@ BEGIN
         V_DIA       DATE;
         V_PAGOS     NUMBER;
         V_TOTAL     NUMBER;
+        V_PAGOS_PREV NUMBER;
+        V_TOTAL_PREV NUMBER;
         V_CANCHA    VARCHAR2(100);
         V_MODALIDAD VARCHAR2(100);
         V_CLIENTE   VARCHAR2(100);
@@ -1774,6 +1782,14 @@ BEGIN
         SELECT MIN(a.ID_ADMINISTRADOR) INTO V_ADMIN
         FROM   SGCD_ADMINISTRADORES a
         WHERE  a.ESTADO_ADMINISTRADOR = 'ACTIVO';
+
+        -- Los pagos del dia pueden existir antes de la prueba (datos de la
+        -- demo). Se guarda la linea base y se comprueba el delta.
+        SELECT COUNT(*), NVL(SUM(p.IMPORTE_PAGO), 0)
+        INTO   V_PAGOS_PREV, V_TOTAL_PREV
+        FROM   SGCD_PAGOS p
+        WHERE  p.ESTADO_PAGO = 'PAGADO'
+          AND  p.FECHA_PAGO >= TRUNC(SYSDATE) AND p.FECHA_PAGO < TRUNC(SYSDATE) + 1;
 
         SGCD_PKG_RESERVAS.crear_reserva(V_A, V_ADMIN, 4, 1, V_MARTES, '10:00', 1,
                                         'MOSTRADOR', V_R1);
@@ -1794,7 +1810,8 @@ BEGIN
         C := NULL;
         SGCD_PKG_CONSULTAS.ingresos(TRUNC(SYSDATE), TRUNC(SYSDATE), C);
         FETCH C INTO V_DIA, V_PAGOS, V_TOTAL;
-        COMPROBAR(V_PAGOS = 2 AND V_TOTAL = 34000 AND TRUNC(V_DIA) = TRUNC(SYSDATE),
+        COMPROBAR(V_PAGOS = V_PAGOS_PREV + 2 AND V_TOTAL = V_TOTAL_PREV + 34000
+                  AND TRUNC(V_DIA) = TRUNC(SYSDATE),
                   'ingresos suma solo los pagos vigentes del dia');
         FETCH C INTO V_DIA, V_PAGOS, V_TOTAL;
         COMPROBAR(C%NOTFOUND, 'ingresos devuelve una fila por dia con movimiento');
