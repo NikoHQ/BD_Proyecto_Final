@@ -137,14 +137,15 @@ async function iniciarPanel() {
 /* Eventos                                                            */
 /* ------------------------------------------------------------------ */
 
-document.addEventListener('input', event => {
+document.addEventListener('input', async event => {
   if (event.target.id === 'reservation-query') {
     reservationQuery = event.target.value;
     reservationPage = 1;
     const caret = event.target.selectionStart;
-    render();
-    $('reservation-query')?.focus();
+    await render();
+    $('reservation-query')?.focus({ preventScroll: true });
     $('reservation-query')?.setSelectionRange(caret, caret);
+    return;
   }
   if (event.target.id === 'reservation-client-query') updateReservationClientResults();
   if (event.target.id === 'search-query') {
