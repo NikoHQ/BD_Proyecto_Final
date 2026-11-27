@@ -24,11 +24,6 @@ Ejecutar **en orden**, conectado como el esquema dueño (`SGCD`), no como `SYSTE
 | 14 | `oracle/14_pruebas_paquetes_sgcd_19.sql` | Pruebas de los paquetes y mantenedores, por unidad. Revierte todo al final | no, limpia al final |
 | 15 | [`oracle/15_datos_operativos_sgcd_19.sql`](oracle/15_datos_operativos_sgcd_19.sql) | Carga 16 fichas ficticias, 48 reservas, 32 pagos y 10 inscripciones para el recorrido de entrega | agrega y conserva lo existente |
 
-Las carreras entre dos conexiones no caben en un bloque anónimo: viven en
-`tests/integracion_dos_sesiones.sh` con `tests/sesion.sql`, y se ejecutan con
-`bash tests/integracion_dos_sesiones.sh`. Crean su propio fixture con `COMMIT`, lo borran al
-terminar y dejan el esquema limpio.
-
 Para Docker local, sigue la [guía de acceso](../docs/entrega/ACCESO_DEMO.md). El instalador verifica
 el usuario `SGCD19` y sólo ejecuta `10` y `11` cuando está vacío. En un esquema ya instalado,
 `--actualizar-paquetes` recompila `12a`–`12j` y `--datos-demo` carga el lote ficticio de `15` por
@@ -52,12 +47,7 @@ solicitud explícita. Si ejecutas los SQL por separado en SQL*Plus, usa
 La v3 reemplaza a la v2 y la 10 reemplaza a la v3: cada DDL borra lo que haya. Para conservar datos
 hay que exportarlos antes. `03_catalogos_v2.sql` **no sirve** en las versiones posteriores: reajusta
 columnas `IDENTITY`, que ya no existen. [Mapa del modelo objetivo](../docs/entrega/MODELO_OBJETIVO.md) ·
-[Contrato Oracle de torneos](../docs/entrega/TORNEOS_ORACLE.md)
-
-## SQLite — prototipo, no se entrega
-
-`sqlite/00_prototipo-modelo.sql` (modelo completo) y `sqlite/01_catalogos.sql` (catálogos). Sirven
-para probar reglas sin levantar Oracle; el motor de la entrega es Oracle.
+[UML oficial](../docs/modelo/uml-equipo-19/UML_objetivo.mdj)
 
 ## Reglas al escribir scripts
 

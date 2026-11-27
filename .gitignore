@@ -4,16 +4,5 @@
 .sync-conflict-*
 .directory
 
-# Vendored AdminLTE 4.10.1 (re-add via composer/npm when the PHP app needs it)
-/package/
-
-# Skills synced from ~/.agents/skills by Syncthing, not part of this project
-/.agents/
-skills-lock.json
+# Credenciales locales de Docker
 .env
-
-# Material recibido del ramo y del equipo: se conserva en disco y por Syncthing,
-# pero no se versiona (PDF, PPTX y UML ajenos que solo engordan el repositorio).
-/23-11-26/
-/material/
-/docs/recibido/

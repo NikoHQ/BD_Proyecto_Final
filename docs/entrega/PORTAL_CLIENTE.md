@@ -31,5 +31,3 @@ Verifica los conflictos con una reserva existente en Oracle. Las inscripciones s
 ## Datos compartidos
 
 Ambos paneles consultan el mismo Oracle. Una solicitud web queda disponible en la agenda administrativa. La programación de un torneo y las reservas de mostrador afectan la disponibilidad del portal. Las tarifas y horarios editados desde administración se aplican al volver a consultar.
-
-Para conectar el sistema, sigue la [guía principal](INTEGRACION_BACKEND.md), el [contrato de reservas](RESERVAS_ORACLE.md) y el [contrato de torneos](TORNEOS_ORACLE.md).

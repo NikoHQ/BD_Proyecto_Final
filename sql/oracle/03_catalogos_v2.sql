@@ -1,6 +1,6 @@
 -- =====================================================================
 -- CARGA DE CATALOGOS - SGCD
--- Portado del prototipo SQLite (sql/sqlite/01_catalogos.sql) a Oracle.
+-- Portado a Oracle desde el prototipo SQLite histórico.
 -- Ejecutar DESPUES de 01_ddl_sgcd_corregido.sql.
 --
 -- Contenido: 2 recintos, 7 instalaciones, 5 deportes, 6 modalidades,

@@ -37,5 +37,3 @@ Conservar la identidad de las filas existentes cuando se trasladen. Si se renume
 5. **Ejecutar la aceptación sobre la copia antes del corte.** Verificar una reserva de 1 y 2 horas, cruces bidireccionales con la cancha grande, confirmación de cada solicitud web y un único pago manual. Probar alta y edición auditadas de fichas, inscripción completa y última plaza concurrente. Probar que los datos web ajenos no se puedan consultar. Conservar copia de seguridad y el reporte de conciliación.
 
 Membresías, puntos, implementos, operador, bloqueos de mantenimiento programados y competición con fixture quedan fuera del alcance objetivo. Los requisitos de recuperación de cuenta que necesiten datos adicionales quedan pendientes de acuerdo con el equipo. No agregar tablas auxiliares de reservas, pagos, idempotencia o torneos a este UML.
-
-[Contrato de reservas Oracle](RESERVAS_ORACLE.md) · [Contrato de torneos Oracle](TORNEOS_ORACLE.md) · [Guía de integración](INTEGRACION_BACKEND.md)
