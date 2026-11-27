@@ -258,20 +258,21 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_RESERVAS AS
         p_inicio    DATE,
         p_termino   DATE,
         p_ignorar   NUMBER) IS
-        v_estado VARCHAR2(15);
-    BEGIN
-        FOR r IN (
+        v_estado SGCD_CANCHAS.ESTADO_CANCHA%TYPE;
+        -- Cursor explícito parametrizado: el FOR abre, recorre y cierra.
+        CURSOR c_canchas(p_cancha NUMBER) IS
             SELECT c.ID_CANCHA
             FROM   SGCD_CANCHAS c
-            WHERE  c.ID_CANCHA = p_id_cancha
+            WHERE  c.ID_CANCHA = p_cancha
                OR  c.ID_CANCHA IN (SELECT cc.ID_CANCHA_PEQUENA
                                    FROM   SGCD_CANCHAS_COMPONENTES cc
-                                   WHERE  cc.ID_CANCHA_GRANDE = p_id_cancha)
+                                   WHERE  cc.ID_CANCHA_GRANDE = p_cancha)
                OR  c.ID_CANCHA IN (SELECT cc.ID_CANCHA_GRANDE
                                    FROM   SGCD_CANCHAS_COMPONENTES cc
-                                   WHERE  cc.ID_CANCHA_PEQUENA = p_id_cancha)
-            ORDER BY c.ID_CANCHA
-        ) LOOP
+                                   WHERE  cc.ID_CANCHA_PEQUENA = p_cancha)
+            ORDER BY c.ID_CANCHA;
+    BEGIN
+        FOR r IN c_canchas(p_id_cancha) LOOP
             SELECT c.ESTADO_CANCHA INTO v_estado
             FROM   SGCD_CANCHAS c
             WHERE  c.ID_CANCHA = r.ID_CANCHA
