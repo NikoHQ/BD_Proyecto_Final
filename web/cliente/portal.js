@@ -118,7 +118,7 @@ function pintar() {
 /* ------------------------------------------------------------------ */
 
 function vistaReservar() {
-  if (!portal.catalogo) return cargando('Leyendo el catálogo del recinto…');
+  if (!portal.catalogo) return cargando('Leyendo el catálogo de sucursales…');
   const recintos = recintosDisponibles();
   const filtro = portal.filtro || (portal.filtro = {
     recinto: recintos[0]?.id ?? '',
@@ -145,7 +145,7 @@ function vistaReservar() {
       <form id="busqueda-form" class="search-panel">
         <h2>Busca tu horario</h2>
         <div class="search-fields">
-          <label>Recinto<select class="form-select" name="recinto">${opcionesRecinto}</select></label>
+          <label>Sucursal<select class="form-select" name="recinto">${opcionesRecinto}</select></label>
           <label>Qué quieres jugar<select class="form-select" name="modalidad">${modalidades}</select></label>
           <label>Cuándo<input class="form-control" type="date" name="fecha" min="${hoyISO()}" value="${esc(filtro.fecha)}" required></label>
           <label>Hora<select class="form-select" name="hora">${opcionesHora}</select></label>
@@ -178,12 +178,12 @@ function resumenHtml() {
   return `<h2>Revisa tu reserva</h2>
     <dl class="summary-data">
       <div><i class="bi bi-bullseye" aria-hidden="true"></i><div><dt>Modalidad</dt><dd>${esc(nombreModalidad(seleccion.modalidad))}</dd></div></div>
-      <div><i class="bi bi-geo-alt" aria-hidden="true"></i><div><dt>Recinto y cancha</dt><dd>${esc(cancha?.nombre || '')} · ${esc(recintoDe(cancha)?.nombre || '')}</dd></div></div>
+      <div><i class="bi bi-geo-alt" aria-hidden="true"></i><div><dt>Sucursal y cancha</dt><dd>${esc(cancha?.nombre || '')} · ${esc(recintoDe(cancha)?.nombre || '')}</dd></div></div>
       <div><i class="bi bi-calendar3" aria-hidden="true"></i><div><dt>Fecha</dt><dd>${esc(fechaLarga(seleccion.fecha))}</dd></div></div>
       <div><i class="bi bi-clock" aria-hidden="true"></i><div><dt>Horario</dt><dd>${esc(seleccion.hora)}–${esc(portal.horarios?.find(bloque => bloque.hora === seleccion.hora && bloque.cancha === seleccion.cancha)?.termino || '')}</dd></div></div>
     </dl>
     <div class="summary-total"><span>Total</span><strong>${total}</strong></div>
-    <p class="small text-secondary mt-2 mb-2">La reserva nace pendiente: el recinto la confirma en recepción.</p>
+    <p class="small text-secondary mt-2 mb-2">La reserva nace pendiente: el personal de la sucursal la confirma en recepción.</p>
     <div class="actions"><button type="button" class="btn btn-success" data-solicitar>Solicitar reserva</button></div>`;
 }
 
@@ -253,7 +253,7 @@ async function solicitarReserva() {
       cancha: portal.seleccion.cancha, modalidad: portal.seleccion.modalidad,
       fecha: portal.seleccion.fecha, hora: portal.seleccion.hora, bloques: portal.seleccion.bloques
     });
-    portal.aviso = 'Solicitud enviada. Queda pendiente de confirmación en el recinto.';
+    portal.aviso = 'Solicitud enviada. Queda pendiente de confirmación en la sucursal.';
     portal.seleccion = null;
     portal.horarios = null;
     portal.cotizacion = null;
@@ -312,7 +312,7 @@ function vistaReservas() {
       <td>${estadoReserva(reserva.estado)}</td>
       <td>${pesos.format(reserva.importe)}</td><td>${acciones}</td></tr>`;
   }).join('');
-  return `<div class="page-heading"><div><h1 class="h2">Mis reservas</h1><p>Solo se muestran tus reservas en este recinto.</p></div>
+  return `<div class="page-heading"><div><h1 class="h2">Mis reservas</h1><p>Solo se muestran tus reservas en esta sucursal.</p></div>
       <a class="btn btn-outline-success" href="#reservar">Nueva reserva</a></div>
     <div class="surface table-responsive"><table class="table align-middle mb-0">
       <thead><tr><th>Fecha</th><th>Horario</th><th>Cancha</th><th>Modalidad</th><th>Estado</th><th>Importe</th><th>Acciones</th></tr></thead>
@@ -446,7 +446,7 @@ function vistaCuenta() {
     </section>
     <aside class="surface side">
       <h2>¿Necesitas cambiar tus datos?</h2>
-      <p class="mb-0">El nombre, teléfono y correo de la ficha los actualiza el personal del recinto en recepción.</p>
+      <p class="mb-0">El nombre, teléfono y correo de la ficha los actualiza el personal de la sucursal en recepción.</p>
     </aside>
   </div>`;
 }
@@ -586,7 +586,7 @@ async function cargarSeccion() {
     try { await cargarTorneos(); } catch (error) { portal.error = error.message; portal.torneos = []; }
   }
   if (seccion === 'reservar' && !portal.catalogo) {
-    $vista().innerHTML = cargando('Leyendo el catálogo del recinto…');
+    $vista().innerHTML = cargando('Leyendo el catálogo de sucursales…');
     try { portal.catalogo = await apiGet('/api/catalogo.php'); } catch (error) { portal.error = error.message; }
   }
   pintar();

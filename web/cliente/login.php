@@ -48,7 +48,7 @@ try {
 <header class="site-header">
   <div class="shell header-inner">
     <a class="brand" href="/cliente/"><span class="brand-mark"><i class="bi bi-calendar2-check" aria-hidden="true"></i></span><span><strong>SGCD</strong><small>Portal de reservas</small></span></a>
-    <a class="btn btn-outline-success account" href="/dashboardadmin/login.php"><i class="bi bi-shield-lock" aria-hidden="true"></i> Personal del recinto</a>
+    <a class="btn btn-outline-success account" href="/dashboardadmin/login.php"><i class="bi bi-shield-lock" aria-hidden="true"></i> Personal de la sucursal</a>
   </div>
 </header>
 <main class="shell main">
@@ -62,7 +62,7 @@ try {
       <label>Contraseña<input class="form-control" type="password" name="password" autocomplete="current-password" maxlength="72" required></label>
       <button class="btn btn-success mt-3">Entrar</button>
     </form>
-    <p class="small mt-3">¿No tienes cuenta? Solicítala en la recepción del recinto: la ficha del cliente se verifica en persona.</p>
+    <p class="small mt-3">¿No tienes cuenta? Solicítala en recepción: la ficha del cliente se verifica en persona.</p>
   </div>
 </main>
 </body>

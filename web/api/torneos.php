@@ -28,7 +28,7 @@ if ($metodo === 'POST') {
 $cuenta = apiSesion(['CLIENTE']);
 $idCliente = (int) ($cuenta['PERSONAL'] ?? 0);
 if ($idCliente <= 0) {
-    apiFail('Tu cuenta no tiene ficha de cliente. Contacta al recinto.', 403);
+    apiFail('Tu cuenta no tiene ficha de cliente. Contacta a la sucursal.', 403);
 }
 
 /** Torneo visible para el cliente y apto para validar el tamano de plantilla. */

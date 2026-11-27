@@ -24,9 +24,36 @@ function accountName(): string
 
 function saveAccountProfile(array $account): void
 {
-    authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
-        ['name' => accountName(), 'id' => $account['PERSONAL']]);
+    authQuery('BEGIN SGCD_ACTUALIZAR_ADMINISTRADOR(:id, :name, :estado); END;',
+        ['name' => accountName(), 'id' => $account['PERSONAL'], 'estado' => $account['ESTADO_PERSONAL']]);
     if (!oci_commit(authDb())) throw new RuntimeException('No se pudo guardar el perfil.');
+}
+
+function listarAdministradores(): array
+{
+    $conexion = authDb();
+    $sentencia = oci_parse($conexion, 'BEGIN SGCD_LISTAR_ADMINISTRADORES(:cursor); END;');
+    if (!$sentencia) throw new RuntimeException('No se pudo preparar el listado de administradores.');
+    $cursor = oci_new_cursor($conexion);
+    oci_bind_by_name($sentencia, ':cursor', $cursor, -1, SQLT_RSET);
+    if (!@oci_execute($sentencia, OCI_NO_AUTO_COMMIT) || !@oci_execute($cursor, OCI_NO_AUTO_COMMIT)) {
+        oci_rollback($conexion);
+        oci_free_statement($cursor);
+        oci_free_statement($sentencia);
+        throw new RuntimeException('No se pudo cargar el listado de administradores.');
+    }
+    $filas = [];
+    oci_fetch_all($cursor, $filas, 0, -1, OCI_FETCHSTATEMENT_BY_ROW);
+    oci_free_statement($cursor);
+    oci_free_statement($sentencia);
+    return array_map(static fn(array $fila): array => [
+        'ID' => (int) $fila['ID_USUARIO'],
+        'PERSONAL' => (int) $fila['ID_ADMINISTRADOR'],
+        'USUARIO' => $fila['LOGIN'],
+        'ROL' => 'ADMINISTRADOR',
+        'ESTADO' => $fila['ESTADO_ADMINISTRADOR'] === 'ACTIVO' ? 'ACTIVA' : 'INACTIVA',
+        'NOMBRE' => $fila['NOMBRE_ADMINISTRADOR'],
+    ], $filas);
 }
 
 function saveStaff(array $account, string $action): void
@@ -40,8 +67,8 @@ function saveStaff(array $account, string $action): void
     }
     rateLimit('staff-confirm', $actor['USUARIO']);
     currentPasswordMatches($actor);
-    $name = accountName();
     if ($action === 'create-staff') {
+        $name = accountName();
         $login = checkedLogin();
         $hash = newPasswordHash();
         authQuery('DECLARE
@@ -54,13 +81,24 @@ function saveStaff(array $account, string $action): void
             ['name' => $name, 'login' => $login, 'hash' => $hash,
              'role' => 'ADMINISTRADOR', 'estado' => 'ACTIVO']);
     } else {
-        $target = accountBy('id', (int) post('id'), true);
-        if (!$target || $target['ID'] === $actor['ID']) throw new DomainException('Edita tus datos desde Mi perfil.');
+        $target = null;
+        foreach (listarAdministradores() as $administrador) {
+            if ($administrador['ID'] === (int) post('id')) $target = $administrador;
+        }
+        if (!$target || $target['ID'] === $actor['ID']) throw new DomainException('No puedes editar ni eliminar tu propia cuenta desde esta sección.');
+        if ($action === 'delete-staff') {
+            authQuery('BEGIN SGCD_BORRAR_ADMINISTRADOR(:id); END;', ['id' => $target['PERSONAL']]);
+            authQuery('BEGIN SGCD_PKG_AUTH.cambiar_estado(:id, :estado); END;',
+                ['id' => $target['ID'], 'estado' => 'INACTIVO']);
+            if (!oci_commit(authDb())) throw new RuntimeException('No se pudo eliminar el administrador.');
+            return;
+        }
         $status = post('status');
         if (!in_array($status, ['ACTIVA', 'INACTIVA'], true)) throw new DomainException('Selecciona un estado válido.');
-        authQuery('UPDATE SGCD_ADMINISTRADORES SET NOMBRE_ADMINISTRADOR = :name WHERE ID_ADMINISTRADOR = :id',
-            ['name' => $name, 'id' => $target['PERSONAL']]);
+        $name = accountName();
         $estado = $status === 'ACTIVA' ? 'ACTIVO' : 'INACTIVO';
+        authQuery('BEGIN SGCD_ACTUALIZAR_ADMINISTRADOR(:id, :name, :estado); END;',
+            ['id' => $target['PERSONAL'], 'name' => $name, 'estado' => $estado]);
         authQuery('BEGIN SGCD_PKG_AUTH.cambiar_estado(:id, :estado); END;',
             ['id' => $target['ID'], 'estado' => $estado]);
         if (post('password') !== '' || post('confirm') !== '') {
@@ -75,6 +113,23 @@ function saveStaff(array $account, string $action): void
 $error = '';
 $message = $_SESSION['account_message'] ?? '';
 unset($_SESSION['account_message']);
+$staff = [];
+$target = null;
+$deleteTarget = null;
+if ($view === 'usuarios') {
+    try {
+        $staff = listarAdministradores();
+        if (isset($_GET['editar']) && ctype_digit((string) $_GET['editar'])) {
+            foreach ($staff as $row) if ($row['ID'] === (int) $_GET['editar'] && $row['ID'] !== $account['ID']) $target = $row;
+        }
+        if (isset($_GET['eliminar']) && ctype_digit((string) $_GET['eliminar'])) {
+            foreach ($staff as $row) if ($row['ID'] === (int) $_GET['eliminar'] && $row['ID'] !== $account['ID']) $deleteTarget = $row;
+        }
+    } catch (Throwable $exception) {
+        error_log('SGCD cuenta: ' . $exception->getMessage());
+        $error = 'No se pudieron cargar los datos de los administradores.';
+    }
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     checkCsrf();
     try {
@@ -92,12 +147,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hash = newPasswordHash();
             changeAccountPassword($account, $hash);
             startAccount(array_replace($account, ['CLAVE' => $hash]));
-        } elseif ($view === 'usuarios' && in_array($action, ['create-staff', 'edit-staff'], true)) {
+        } elseif ($view === 'usuarios' && in_array($action, ['create-staff', 'edit-staff', 'delete-staff'], true)) {
             saveStaff($account, $action);
         } else {
             throw new DomainException('La operación no está disponible.');
         }
-        $_SESSION['account_message'] = 'Cambios guardados.';
+        $_SESSION['account_message'] = $action === 'delete-staff'
+            ? 'Administrador eliminado y acceso desactivado.' : 'Cambios guardados.';
         redirectTo('account.php?vista=' . $view);
     } catch (DomainException $exception) {
         rollbackAccountWork();
@@ -107,27 +163,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         rollbackAccountWork();
         $error = 'No se pudieron guardar los cambios. Intenta nuevamente.';
     }
-}
-
-$staff = [];
-$target = null;
-try {
-    if ($view === 'usuarios') {
-        $stmt = authQuery("SELECT u.ID_USUARIO AS ID, u.LOGIN AS USUARIO, u.ROL AS ROL,
-                                  CASE u.ESTADO_USUARIO WHEN 'ACTIVO' THEN 'ACTIVA' ELSE 'INACTIVA' END AS ESTADO,
-                                  a.NOMBRE_ADMINISTRADOR AS NOMBRE
-                           FROM SGCD_USUARIOS u JOIN SGCD_ADMINISTRADORES a
-                             ON a.ID_USUARIO = u.ID_USUARIO
-                           ORDER BY a.NOMBRE_ADMINISTRADOR");
-        oci_fetch_all($stmt, $staff, 0, -1, OCI_FETCHSTATEMENT_BY_ROW);
-        if (isset($_GET['editar']) && ctype_digit((string) $_GET['editar'])) {
-            $candidate = accountBy('id', (int) $_GET['editar']);
-            if ($candidate && $candidate['ID'] !== $account['ID']) $target = $candidate;
-        }
-    }
-} catch (Throwable $exception) {
-    error_log('SGCD cuenta: ' . $exception->getMessage());
-    $error = 'No se pudieron cargar los datos de la cuenta.';
 }
 
 function currentPasswordField(): string
@@ -196,7 +231,10 @@ function roleName(string $role): string
           <?php foreach ($staff as $row): ?>
             <tr><td><?= esc($row['NOMBRE']) ?></td><td><?= esc($row['USUARIO']) ?></td><td><?= roleName($row['ROL']) ?></td>
               <td><span class="status <?= $row['ESTADO'] === 'ACTIVA' ? 'completed' : 'cancelled' ?>"><?= esc($row['ESTADO']) ?></span></td>
-              <td><?php if ($row['ID'] !== $account['ID']): ?><a href="?vista=usuarios&amp;editar=<?= (int) $row['ID'] ?>#formulario">Editar</a><?php else: ?><span class="text-secondary">Tu cuenta</span><?php endif; ?></td>
+              <td><?php if ($row['ID'] !== $account['ID']): ?>
+                <a href="?vista=usuarios&amp;editar=<?= (int) $row['ID'] ?>#formulario">Editar</a>
+                · <a href="?vista=usuarios&amp;eliminar=<?= (int) $row['ID'] ?>#formulario-eliminar">Eliminar</a>
+              <?php else: ?><span class="text-secondary">Tu cuenta</span><?php endif; ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>
@@ -224,6 +262,19 @@ function roleName(string $role): string
           <?php else: ?><?= passwordFields() ?><?php endif; ?>
           <?= currentPasswordField() ?>
           <button class="btn btn-accent">Guardar usuario</button> <a class="btn btn-light" href="?vista=usuarios">Cancelar</a>
+        </form>
+      </div></section>
+    <?php endif; ?>
+    <?php if ($deleteTarget): ?>
+      <section class="card mt-3" id="formulario-eliminar"><div class="card-body">
+        <h2 class="h5">Eliminar <?= esc($deleteTarget['NOMBRE']) ?></h2>
+        <p>Se eliminará su ficha de administrador y se desactivará su acceso. Si tiene reservas asociadas, Oracle rechazará la eliminación.</p>
+        <form method="post">
+          <?= csrfField() ?><input type="hidden" name="action" value="delete-staff">
+          <input type="hidden" name="id" value="<?= (int) $deleteTarget['ID'] ?>">
+          <?= currentPasswordField() ?>
+          <button class="btn btn-danger">Confirmar eliminación</button>
+          <a class="btn btn-light" href="?vista=usuarios">Cancelar</a>
         </form>
       </div></section>
     <?php endif; ?>

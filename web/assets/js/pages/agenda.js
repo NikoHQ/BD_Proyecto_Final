@@ -111,7 +111,7 @@ function agenda() {
       <div class="d-flex flex-wrap justify-content-between gap-1"><strong>${escapeHtml(row.cliente)}</strong><span class="small fw-semibold">${escapeHtml(statuses.pending)}</span></div>
       <div class="small text-secondary mb-2">${row.start} · ${escapeHtml(row.cancha)}</div>
       <div class="d-flex flex-wrap gap-2">${document.body.dataset.accountRole === 'ADMINISTRADOR' ? button(`confirm-${row.id}`, 'Confirmar', 'btn-accent btn-sm') : ''}${button(`ask-cancel-${row.id}`, 'Cancelar', 'btn-outline-secondary btn-sm')}</div></div>`).join('');
-  const venueOptions = selectOption('', 'Todos los recintos', !venue) +
+  const venueOptions = selectOption('', 'Todas las sucursales', !venue) +
     panel.recintos.map(recinto => selectOption(recinto.id, recinto.nombre, String(venue) === String(recinto.id))).join('');
   return `${heading('Agenda y operación', '', button('new', `${icon('plus-lg')} Nueva reserva`, 'btn-accent'))}
     <div class="row g-2 mb-3">
@@ -122,7 +122,7 @@ function agenda() {
     </div>
     <div class="row g-3 mb-3">
       <div class="col-12 col-xl-9">${card('Agenda de instalaciones', `
-        <div class="card-body border-bottom agenda-tools"><div class="toolbar">${dateControls()}<select id="venue" class="form-select" aria-label="Filtrar por recinto">${venueOptions}</select>
+        <div class="card-body border-bottom agenda-tools"><div class="toolbar">${dateControls()}<select id="venue" class="form-select" aria-label="Filtrar por sucursal">${venueOptions}</select>
         <input type="search" id="court-query" class="form-control court-search" aria-label="Buscar instalación" placeholder="Buscar instalación" value="${escapeHtml(courtQuery)}"></div>
         <div class="d-flex flex-wrap justify-content-between gap-2 mt-2"><strong class="small agenda-date">${dateLabel.format(new Date(date + 'T12:00:00'))}</strong><div class="legend">${Object.keys(statuses).map(badge).join('')}${tournamentBadge()}</div></div></div>
         ${timeline(rows, canchas)}${canchas.length && !rows.length ? '<p class="empty">No hay reservas para esta selección.</p>' : ''}`)}</div>
