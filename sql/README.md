@@ -46,8 +46,7 @@ solicitud explícita. Si ejecutas los SQL por separado en SQL*Plus, usa
 
 La v3 reemplaza a la v2 y la 10 reemplaza a la v3: cada DDL borra lo que haya. Para conservar datos
 hay que exportarlos antes. `03_catalogos_v2.sql` **no sirve** en las versiones posteriores: reajusta
-columnas `IDENTITY`, que ya no existen. [Mapa del modelo objetivo](../docs/entrega/MODELO_OBJETIVO.md) ·
-[UML oficial](../docs/modelo/uml-equipo-19/UML_objetivo.mdj)
+columnas `IDENTITY`, que ya no existen. [UML oficial](../docs/modelo/UML_objetivo.mdj)
 
 ## Reglas al escribir scripts
 
