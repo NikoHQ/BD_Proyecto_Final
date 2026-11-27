@@ -243,6 +243,7 @@ function apiLlamar(string $plsql, array $binds = [], bool $confirmar = false, ?s
 
     if (!@oci_execute($sentencia, OCI_NO_AUTO_COMMIT)) {
         $fallo = oci_error($sentencia);
+        oci_rollback($conexion);
         oci_free_statement($sentencia);
         apiErrorOracle((int) ($fallo['code'] ?? 0), (string) ($fallo['message'] ?? ''));
     }
@@ -251,6 +252,7 @@ function apiLlamar(string $plsql, array $binds = [], bool $confirmar = false, ?s
     if ($ref !== null) {
         if (!@oci_execute($ref, OCI_NO_AUTO_COMMIT)) {
             $fallo = oci_error($ref);
+            oci_rollback($conexion);
             oci_free_statement($ref);
             oci_free_statement($sentencia);
             apiErrorOracle((int) ($fallo['code'] ?? 0), (string) ($fallo['message'] ?? ''));
@@ -266,4 +268,18 @@ function apiLlamar(string $plsql, array $binds = [], bool $confirmar = false, ?s
     }
     oci_free_statement($sentencia);
     return ['out' => $binds, 'filas' => $filas];
+}
+
+/** Confirma un lote de llamadas ejecutadas con OCI_NO_AUTO_COMMIT. */
+function apiConfirmar(): void
+{
+    try {
+        $conexion = authDb();
+    } catch (Throwable $error) {
+        apiFail('La base no esta disponible. Intenta en un momento.', 503);
+    }
+    if (!oci_commit($conexion)) {
+        oci_rollback($conexion);
+        apiFail('No se pudo confirmar la operacion.', 500);
+    }
 }

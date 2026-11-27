@@ -6,6 +6,9 @@
 .reservation-table tr.is-selected td { background:#e6f7f0; }
 .reservation-table .reservation-link, .management-table .reservation-link { border:0; padding:0; color:#075fca; background:transparent; font:inherit; text-align:left; }
 .reservation-table .reservation-link { font-weight:700; }
+.payment-reservation-link { border:0; padding:0; color:#075fca; background:transparent; font:inherit; font-weight:700; text-align:left; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:.18em; cursor:pointer; }
+.payment-reservation-link:hover { color:#064b9f; }
+.payment-reservation-link:focus-visible { outline:2px solid #7ab7fa; outline-offset:3px; border-radius:2px; }
 .management-table .dropdown-item { white-space:nowrap; }
 .selectable-row { cursor:pointer; }
 .management-table tr.is-selected td { background:#e6f7f0; }
@@ -22,3 +25,10 @@
 .reservation-pagination { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.7rem; padding:.7rem .85rem; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line); }
 .reservation-pagination label { display:flex; align-items:center; gap:.35rem; margin:0; }
 .reservation-pagination .form-select { width:4.3rem; }
+.payment-period .card-body { padding:.85rem 1rem; }
+.payment-period .form-control { width:10.5rem; }
+.payment-period-separator { color:var(--muted); margin-top:1.1rem; }
+.payment-pagination { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.7rem; padding:.7rem .85rem; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line); }
+.payment-pagination label { display:flex; align-items:center; gap:.35rem; margin:0; }
+.payment-pagination .form-select { width:4.3rem; }
+@media (max-width: 575.98px) { .payment-period .form-control { width:100%; } .payment-period .toolbar { width:100%; } .payment-period .toolbar label { flex:1 1 8rem; } .payment-period-separator { display:none; } }

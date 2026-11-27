@@ -29,7 +29,8 @@ switch ($accion) {
             ], $deportes),
             'modalidades' => array_map(static fn(array $f): array => [
                 'id' => (int) $f['ID_MODALIDAD'], 'nombre' => $f['NOMBRE_MODALIDAD'],
-                'deporte' => (int) $f['ID_DEPORTE'], 'maximo' => (int) $f['MAX_JUGADORES_POR_EQUIPO'],
+                'deporte' => (int) $f['ID_DEPORTE'], 'minimo' => (int) $f['MIN_JUGADORES_POR_EQUIPO'],
+                'maximo' => (int) $f['MAX_JUGADORES_POR_EQUIPO'],
                 'estado' => $f['ESTADO_MODALIDAD'],
             ], $modalidades),
         ]);
@@ -101,7 +102,7 @@ if ($operacion === 'estado') {
             EXCEPTION WHEN NO_DATA_FOUND THEN RAISE_APPLICATION_ERROR(-20862, \'La cancha no existe\'); END;',
         'modalidad' => 'DECLARE r SGCD_MODALIDADES%ROWTYPE; BEGIN
             SELECT * INTO r FROM SGCD_MODALIDADES WHERE ID_MODALIDAD = :id FOR UPDATE;
-            SGCD_ACTUALIZAR_MODALIDAD(:id, r.ID_DEPORTE, r.MAX_JUGADORES_POR_EQUIPO, r.NOMBRE_MODALIDAD, :estado);
+            SGCD_ACTUALIZAR_MODALIDAD(:id, r.ID_DEPORTE, r.MIN_JUGADORES_POR_EQUIPO, r.MAX_JUGADORES_POR_EQUIPO, r.NOMBRE_MODALIDAD, :estado);
             EXCEPTION WHEN NO_DATA_FOUND THEN RAISE_APPLICATION_ERROR(-20832, \'La modalidad no existe\'); END;',
         default => null,
     };
@@ -126,12 +127,14 @@ switch ($entidad) {
         break;
 
     case 'modalidad':
+        $maximo = apiEntero($entrada['maximo'] ?? null, 'maximo');
         $binds += ['nombre' => $nombre, 'deporte' => apiEntero($entrada['deporte'] ?? null, 'deporte'),
-            'maximo' => apiEntero($entrada['maximo'] ?? null, 'maximo')];
-        $llamada = 'SGCD_CREAR_MODALIDAD(:deporte, :maximo, :nombre, :id)';
+            'minimo' => isset($entrada['minimo']) && $entrada['minimo'] !== '' ? apiEntero($entrada['minimo'], 'minimo') : 1,
+            'maximo' => $maximo];
+        $llamada = 'SGCD_CREAR_MODALIDAD(:deporte, :minimo, :maximo, :nombre, :id)';
         if ($id) {
             $binds['estado'] = $estado;
-            $llamada = 'SGCD_ACTUALIZAR_MODALIDAD(:id, :deporte, :maximo, :nombre, :estado)';
+            $llamada = 'SGCD_ACTUALIZAR_MODALIDAD(:id, :deporte, :minimo, :maximo, :nombre, :estado)';
         }
         break;
 

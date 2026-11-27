@@ -171,11 +171,27 @@ document.addEventListener('change', event => {
   if (id === 'status-filter') { statusFilter = value; return render(); }
   if (id === 'pagos-desde' || id === 'pagos-hasta') {
     rangoPagos[id === 'pagos-desde' ? 'desde' : 'hasta'] = value;
-    return;
+    return refreshPayments();
+  }
+  if (id === 'pagos-pendientes-page-size') {
+    pagosPendientesPageSize = Number(value);
+    pagosPendientesPage = 1;
+    return render();
+  }
+  if (id === 'pagos-registrados-page-size') {
+    pagosRegistradosPageSize = Number(value);
+    pagosRegistradosPage = 1;
+    return render();
   }
   if (id === 'reportes-desde' || id === 'reportes-hasta') {
     rangoReportes[id === 'reportes-desde' ? 'desde' : 'hasta'] = value;
-    return;
+    return refreshReportes();
+  }
+  const reporteLimite = /^reportes-(ingresos|canchas|clientes)-page-size$/.exec(id);
+  if (reporteLimite) {
+    reporteLimites[reporteLimite[1]] = Number(value);
+    reportePaginas[reporteLimite[1]] = 1;
+    return render();
   }
 });
 
@@ -257,13 +273,17 @@ document.addEventListener('click', async event => {
     const row = reservaPorId(step[2]);
     if (!row) return;
     if (step[1] === 'ask-cancel') {
-      return showDialog(`Cancelar ${label(row)}`, `<p>Se liberará el horario de ${escapeHtml(row.cliente)}.</p><div class="d-flex gap-2"><button type="button" class="btn btn-light border" data-bs-dismiss="modal">Volver</button>${button(`cancel-${row.id}`, 'Sí, cancelar', 'btn-danger')}</div>`);
+      const solicitudWeb = row.origen === 'Web' && row.estado === 'pending' && !row.torneoId;
+      return showDialog(solicitudWeb ? 'Rechazar solicitud' : `Cancelar ${label(row)}`, solicitudWeb
+        ? `<p>La solicitud de ${escapeHtml(row.cliente)} será rechazada y el horario quedará disponible.</p><div class="d-flex gap-2"><button type="button" class="btn btn-light border" data-bs-dismiss="modal">Volver</button>${button(`cancel-${row.id}`, 'Sí, rechazar', 'btn-danger')}</div>`
+        : `<p>Se liberará el horario de ${escapeHtml(row.cliente)}.</p><div class="d-flex gap-2"><button type="button" class="btn btn-light border" data-bs-dismiss="modal">Volver</button>${button(`cancel-${row.id}`, 'Sí, cancelar', 'btn-danger')}</div>`);
     }
     try {
       await (step[1] === 'confirm' ? reservasApi.confirmar(row.id) : reservasApi.cancelar(row.id));
       dialog.hide();
       await recargarAgenda(row.fecha);
-      feedback(step[1] === 'confirm' ? 'Reserva confirmada.' : 'Reserva cancelada.');
+      const solicitudWeb = row.origen === 'Web' && row.estado === 'pending' && !row.torneoId;
+      feedback(step[1] === 'confirm' ? (solicitudWeb ? 'Solicitud aprobada.' : 'Reserva confirmada.') : (solicitudWeb ? 'Solicitud rechazada.' : 'Reserva cancelada.'));
       render();
     } catch (error) {
       feedback(error.message);
@@ -279,13 +299,19 @@ document.addEventListener('click', async event => {
     return render();
   }
 
-  if (action === 'pagos-reload') {
-    pagosCargados = false;
-    return render();
-  }
+  if (action === 'pagos-period-30') return aplicarPeriodoPagos('30');
+  if (action === 'pagos-period-month') return aplicarPeriodoPagos('month');
+  if (action === 'reportes-period-30') return aplicarPeriodoReportes('30');
+  if (action === 'reportes-period-month') return aplicarPeriodoReportes('month');
+  if (action === 'pagos-pendientes-previous') { pagosPendientesPage = Math.max(1, pagosPendientesPage - 1); return render(); }
+  if (action === 'pagos-pendientes-next') { pagosPendientesPage++; return render(); }
+  if (action === 'pagos-registrados-previous') { pagosRegistradosPage = Math.max(1, pagosRegistradosPage - 1); return render(); }
+  if (action === 'pagos-registrados-next') { pagosRegistradosPage++; return render(); }
   if (action.startsWith('void-payment-')) return requestVoidPayment(Number(action.slice('void-payment-'.length)));  if (action.startsWith('confirm-void-payment-')) return voidPayment(Number(action.slice('confirm-void-payment-'.length)));
-  if (action === 'reportes-reload') {
-    reportesCargados = false;
+  const reportePagina = /^reportes-(ingresos|canchas|clientes)-(previous|next)$/.exec(action);
+  if (reportePagina) {
+    const [, tipo, direccion] = reportePagina;
+    reportePaginas[tipo] = Math.max(1, reportePaginas[tipo] + (direccion === 'next' ? 1 : -1));
     return render();
   }
 

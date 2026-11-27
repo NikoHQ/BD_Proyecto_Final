@@ -77,11 +77,11 @@ function modalidadesDefinition(f, action) {
     rows: (modalidadesAdministracion || []).filter(item => managementSearch(f.query, [item.nombre, deporte(item)]) &&
       (!f.status || item.estado === f.status)),
     name: item => item.nombre,
-    cells: item => [deporte(item), String(item.maximo), activeStates[item.estado]],
+    cells: item => [deporte(item), `${item.minimo}–${item.maximo}`, activeStates[item.estado]],
     actions: item => [action('edit', item.id, 'Editar'), action('toggle', item.id,
       item.estado === 'ACTIVO' ? 'Desactivar' : 'Activar'), action('ask-delete', item.id, 'Eliminar', true)],
     details: item => managementDetails('Detalle · ' + escapeHtml(item.nombre), [
-      ['Deporte', deporte(item)], ['Máximo por equipo', String(item.maximo)], ['Estado', activeStates[item.estado]]
+      ['Deporte', deporte(item)], ['Jugadores por equipo', `${item.minimo}–${item.maximo}`], ['Estado', activeStates[item.estado]]
     ], button('manage-edit-' + item.id, 'Editar modalidad'))
   };
 }
@@ -92,6 +92,7 @@ function abrirModalidad(item = null) {
   managementForm(item ? 'Editar modalidad' : 'Agregar modalidad', 'modalidad', item?.id ?? 0,
     field('nombre', 'Nombre', item?.nombre, 'required maxlength="80"') +
     editSelect('deporte', 'Deporte', deportes.map(entry => [entry.id, entry.nombre]), item?.deporte) +
+    field('minimo', 'Mínimo por equipo', item?.minimo ?? 1, 'type="number" required min="1" max="50" step="1"') +
     field('maximo', 'Máximo por equipo', item?.maximo, 'type="number" required min="1" max="50" step="1"') +
     (item ? editSelect('estado', 'Estado', Object.entries(activeStates), item.estado) : ''));
 }

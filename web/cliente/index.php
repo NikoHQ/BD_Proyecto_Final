@@ -5,13 +5,11 @@ require_once __DIR__ . '/../includes/auth.php';
 authStart();
 
 $cuenta = currentAccount();
-if (!$cuenta) {
-    redirectTo('/cliente/login.php');
-}
-if ($cuenta['ROL'] !== 'CLIENTE') {
+if ($cuenta && $cuenta['ROL'] !== 'CLIENTE') {
     redirectTo('/dashboardadmin/');
 }
 $clienteId = (int) ($cuenta['PERSONAL'] ?? 0);
+$clienteNombre = $cuenta['NOMBRE'] ?? '';
 $csrf = csrfToken();
 ?>
 <!doctype html>
@@ -27,7 +25,7 @@ $csrf = csrfToken();
   <script defer src="/assets/js/data/api.js"></script>
   <script defer src="/cliente/portal.js"></script>
 </head>
-<body data-cliente="<?= $clienteId ?>" data-cliente-nombre="<?= esc($cuenta['NOMBRE']) ?>">
+<body data-cliente="<?= $clienteId ?>" data-cliente-nombre="<?= esc($clienteNombre) ?>" data-autenticado="<?= $cuenta ? '1' : '0' ?>">
 <a class="visually-hidden-focusable skip" href="#vista">Saltar al contenido</a>
 <header class="site-header">
   <div class="shell header-inner">
@@ -36,9 +34,15 @@ $csrf = csrfToken();
       <a href="#reservar" data-seccion="reservar"><i class="bi bi-calendar3" aria-hidden="true"></i> Reservar cancha</a>
       <a href="#reservas" data-seccion="reservas"><i class="bi bi-ticket-perforated" aria-hidden="true"></i> Mis reservas</a>
       <a href="#torneos" data-seccion="torneos"><i class="bi bi-trophy" aria-hidden="true"></i> Torneos</a>
-      <a href="#cuenta" data-seccion="cuenta"><i class="bi bi-person" aria-hidden="true"></i> Mi cuenta</a>
+      <?php if ($cuenta): ?>
+        <a href="#cuenta" data-seccion="cuenta"><i class="bi bi-person" aria-hidden="true"></i> Mi cuenta</a>
+      <?php endif; ?>
     </nav>
-    <span class="account small text-nowrap"><i class="bi bi-person-circle" aria-hidden="true"></i> <?= esc($cuenta['NOMBRE']) ?></span>
+    <?php if ($cuenta): ?>
+      <a class="account small text-nowrap" href="#cuenta"><i class="bi bi-person-circle" aria-hidden="true"></i> <?= esc($clienteNombre) ?></a>
+    <?php else: ?>
+      <a class="account btn btn-outline-success btn-sm" href="/cliente/login.php"><i class="bi bi-person-circle" aria-hidden="true"></i> Iniciar sesión</a>
+    <?php endif; ?>
   </div>
 </header>
 
@@ -46,9 +50,5 @@ $csrf = csrfToken();
   <div id="vista" aria-live="polite"></div>
 </main>
 
-<footer class="shell site-footer">
-  <span>SGCD · Recinto Las Rastras</span>
-  <a href="#cuenta">Mi cuenta</a>
-</footer>
 </body>
 </html>

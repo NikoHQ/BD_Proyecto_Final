@@ -6,13 +6,13 @@ El portal y el panel administrativo comparten programación, cupos e inscripcion
 
 | Dato de la interfaz | Origen y regla |
 | --- | --- |
-| Torneo | `TORNEO` guarda modalidad, nombre, fecha de inicio y término, estado, `CUPOS_TORNEO` y `MAX_JUGADORES_POR_EQUIPO`. Al crear, copiar el máximo inicial de `MODALIDAD.MAX_JUGADORES_POR_EQUIPO`. El administrador puede ajustarlo por torneo siempre que ninguna plantilla activa supere el nuevo máximo. En la demo se ajusta mientras el torneo está planificado. |
+| Torneo | `TORNEO` guarda modalidad, nombre, fecha de inicio y término, estado, `CUPOS_TORNEO`, `MIN_JUGADORES_POR_EQUIPO` y `MAX_JUGADORES_POR_EQUIPO`. Al crear, copia el rango inicial de `MODALIDAD`. El administrador puede ajustarlo por torneo siempre que ninguna plantilla activa supere el nuevo máximo. |
 | Programación | Cada bloque corresponde a una `RESERVA` vinculada mediante `ID_TORNEO`. Se obtiene el recinto desde `RESERVA.ID_CANCHA → CANCHA.ID_RECINTO`. El selector de recinto del panel ayuda a elegir canchas compatibles. El UML guarda los recintos por bloque y el portal conectado debe mostrarlos aunque un torneo tenga más de uno. El bloque de torneo puede prescindir de cliente. |
-| Inscripción | `INSCRIPCION_TORNEO` guarda `ID_TORNEO`, `ID_CLIENTE` del responsable, `NOMBRE_EQUIPO`, `CANTIDAD_JUGADORES`, `FECHA_INSCRIPCION` y `ESTADO_INSCRIPCION`. Cada inscripción activa ocupa un cupo de equipo. Una plantilla válida contiene desde un jugador hasta el máximo del torneo, incluido siempre el capitán. |
+| Inscripción | `INSCRIPCION_TORNEO` guarda `ID_TORNEO`, `ID_CLIENTE` del responsable, `NOMBRE_EQUIPO`, `CANTIDAD_JUGADORES`, `FECHA_INSCRIPCION` y `ESTADO_INSCRIPCION`. Cada inscripción activa ocupa un cupo de equipo. La plantilla válida contiene entre el mínimo y el máximo del torneo, incluido siempre el capitán. |
 | Jugadores | `JUGADOR` guarda nombre, RUT y DV. Validar y normalizar el dígito a 0–9 o K, y aplicar unicidad a `(RUT_JUGADOR, DV_JUGADOR)`. Si hay una ficha `CLIENTE` con ese RUT, vincular de forma opcional y única mediante `JUGADOR.ID_CLIENTE`. Cada miembro corresponde a un vínculo `EQUIPO_JUGADOR(ID_INSCRIPCION, ID_JUGADOR)`. |
 | Cuenta | Inscribir desde el portal con un `USUARIO` activo de rol cliente y su ficha `CLIENTE` activa. Obtener el capitán de esa sesión. El personal autenticado puede seleccionar una ficha activa desde administración. Los compañeros sólo requieren nombre completo y RUT. |
 
-La demo ofrece Fútbol 6 con máximo inicial 10, Pádel dobles con 2 y Tenis con 1. El número representa el límite del plantel total. El equipo puede tener menos integrantes. `CANTIDAD_JUGADORES` registra los vínculos reales que resultan del guardado.
+La demo ofrece Fútbol 6 con rango 6–10, Pádel dobles con 2–2 y Tenis con 1–1. El rango incluye al capitán. `CANTIDAD_JUGADORES` registra los vínculos reales que resultan del guardado.
 
 ## Contrato PHP
 
@@ -20,7 +20,7 @@ La demo ofrece Fútbol 6 con máximo inicial 10, Pádel dobles con 2 y Tenis con
 | --- | --- |
 | Ver torneos | Filtros de modalidad, recinto e inscripción abierta. Devuelve ID, nombre, modalidad, programación publicada, máximo, cupos, estado del torneo y estado de inscripción. |
 | Mis inscripciones | Sesión de cliente e ID de inscripción para consultar un detalle. Filtrar por `INSCRIPCION_TORNEO.ID_CLIENTE`. La respuesta incluye los miembros reales, la programación y las acciones válidas. Responder igual ante un ID inexistente y uno ajeno. |
-| Inscribir | POST con ID de torneo, nombre de equipo para modalidades colectivas, máximo mostrado, compañeros con nombre y RUT, y clave de idempotencia. El responsable sale de la sesión. Crear la relación del capitán y todas las relaciones de compañeros. Devolver el comprobante y el ID estable de la inscripción. Para un torneo individual, la demo asigna el nombre de inscripción a partir del titular. |
+| Inscribir | POST con ID de torneo, nombre de equipo y la lista de compañeros con nombre y RUT. El responsable sale de la sesión y ocupa el lugar de capitán. El servidor valida que el total queda entre el mínimo y máximo del torneo y confirma en una única transacción el capitán más todos los compañeros. Devolver el comprobante y el ID estable de la inscripción. |
 | Editar | POST con ID de inscripción, nombre y lista completa de compañeros actuales. El cliente conserva al capitán. El personal puede corregir el responsable con autorización. La inscripción conserva su ID y su cupo. |
 | Retirar | POST con ID de inscripción. Conservar inscripción, plantilla e historial. Cambiar a retirado y liberar cupo y RUT para otra inscripción en ese torneo. Repetir el retiro de una inscripción propia devuelve el mismo estado. |
 | Ajustar máximo | POST de personal con ID de torneo y nuevo máximo. Validar entero positivo y comprobar las plantillas activas bajo el mismo bloqueo que usa la inscripción. Las plantillas retiradas se conservan aunque excedan un nuevo máximo. |

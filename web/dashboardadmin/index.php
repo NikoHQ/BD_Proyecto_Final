@@ -63,7 +63,6 @@ $avatar = strtoupper(implode('', array_slice($initials[1], 0, 2))) ?: 'SG';
     </div>
     <div class="sidebar-wrapper">
       <nav class="mt-3" aria-label="Menú principal"><ul id="menu" class="nav sidebar-menu flex-column"></ul></nav>
-      <div class="side-foot"><i class="bi bi-database-check me-1"></i> Oracle · SGCD</div>
     </div>
   </aside>
   <main class="app-main"><div class="app-content"><div class="container-fluid workspace" id="screen"></div></div></main>

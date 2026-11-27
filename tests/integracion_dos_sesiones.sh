@@ -24,9 +24,14 @@
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONT="${CONT:-oracle-free}"
+ROOT="$(cd "$DIR/.." && pwd)"
+CONT="${CONT:-sgcd-oracle}"
 DBUSER="${DBUSER:-SGCD19}"
-DBPASS="${DBPASS:-Sgcd19lab#2026}"
+DBPASS="${DBPASS:-${SGCD_DB_PASSWORD:-}}"
+if [ -z "$DBPASS" ] && [ -f "$ROOT/.env" ]; then
+    DBPASS="$(sed -n 's/^SGCD_DB_PASSWORD=//p' "$ROOT/.env" | head -n 1)"
+fi
+: "${DBPASS:?Define DBPASS o SGCD_DB_PASSWORD para ejecutar esta prueba.}"
 DBSVC="${DBSVC:-localhost/FREEPDB1}"
 TMP="$(mktemp -d)"
 FALLAS=0

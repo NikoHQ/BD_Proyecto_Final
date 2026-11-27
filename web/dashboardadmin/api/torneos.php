@@ -10,11 +10,11 @@ require_once __DIR__ . '/../../includes/torneos-dto.php';
  *   GET  torneos       [modalidad, estado, cliente]
  *   GET  inscripciones [torneo, cliente]
  *   GET  inscripcion   id
- *   POST crear         modalidad, nombre, inicio, fin, cupos [maximo]
+ *   POST crear         modalidad, nombre, inicio, fin, cupos [minimo, maximo]
  *   POST inscribir     torneo, cliente, equipo
  *   POST agregar       inscripcion, rut, nombre
  *   POST retirar       inscripcion
- *   POST maximo        torneo, maximo
+ *   POST rango         torneo, minimo, maximo
  *   POST programar     torneo, cancha, fecha, desde, hasta
  */
 
@@ -47,13 +47,15 @@ switch ($accion) {
     case 'crear':
         $r = apiLlamar(
             'BEGIN SGCD_PKG_TORNEOS.crear_torneo(:modalidad, :nombre, :inicio, :termino, '
-            . ':cupos, :maximo, :id); END;',
+            . ':cupos, :maximo, :id, :minimo); END;',
             [
                 'modalidad' => apiEntero($entrada['modalidad'] ?? null, 'modalidad'),
                 'nombre' => (string) ($entrada['nombre'] ?? ''),
                 'inicio' => apiFecha((string) ($entrada['inicio'] ?? ''), 'inicio'),
                 'termino' => apiFecha((string) ($entrada['fin'] ?? ''), 'fin'),
                 'cupos' => apiEntero($entrada['cupos'] ?? null, 'cupos'),
+                'minimo' => isset($entrada['minimo']) && $entrada['minimo'] !== ''
+                    ? apiEntero($entrada['minimo'], 'minimo') : null,
                 'maximo' => isset($entrada['maximo']) && $entrada['maximo'] !== ''
                     ? apiEntero($entrada['maximo'], 'maximo') : null,
                 'id' => 0,
@@ -98,9 +100,10 @@ switch ($accion) {
         apiOk(['retirado' => true]);
         break;
 
-    case 'maximo':
-        apiLlamar('BEGIN SGCD_PKG_TORNEOS.ajustar_maximo(:torneo, :maximo); END;', [
+    case 'rango':
+        apiLlamar('BEGIN SGCD_PKG_TORNEOS.ajustar_rango(:torneo, :minimo, :maximo); END;', [
             'torneo' => apiEntero($entrada['torneo'] ?? null, 'torneo'),
+            'minimo' => apiEntero($entrada['minimo'] ?? null, 'minimo'),
             'maximo' => apiEntero($entrada['maximo'] ?? null, 'maximo'),
         ], true);
         apiOk(['ajustado' => true]);

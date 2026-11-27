@@ -42,7 +42,8 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_TORNEOS AS
         p_fecha_termino DATE,
         p_cupos         NUMBER,
         p_max_jugadores NUMBER DEFAULT NULL,
-        p_id_torneo     OUT NUMBER);
+        p_id_torneo     OUT NUMBER,
+        p_min_jugadores NUMBER DEFAULT NULL);
     PROCEDURE inscribir_equipo(
         p_id_torneo     NUMBER,
         p_id_cliente    NUMBER,
@@ -53,8 +54,12 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_TORNEOS AS
         p_rut            NUMBER,
         p_dv             VARCHAR2,
         p_nombre         VARCHAR2);
+    PROCEDURE preparar_plantilla(
+        p_id_inscripcion NUMBER,
+        p_nombre_equipo  VARCHAR2);
     PROCEDURE retirar_equipo(p_id_inscripcion NUMBER);
     PROCEDURE ajustar_maximo(p_id_torneo NUMBER, p_max_jugadores NUMBER);
+    PROCEDURE ajustar_rango(p_id_torneo NUMBER, p_min_jugadores NUMBER, p_max_jugadores NUMBER);
     PROCEDURE programar_torneo(
         p_id_torneo  NUMBER,
         p_id_cancha  NUMBER,
@@ -189,29 +194,35 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
         p_fecha_termino DATE,
         p_cupos         NUMBER,
         p_max_jugadores NUMBER DEFAULT NULL,
-        p_id_torneo     OUT NUMBER) IS
+        p_id_torneo     OUT NUMBER,
+        p_min_jugadores NUMBER DEFAULT NULL) IS
+        v_min NUMBER;
         v_max NUMBER;
     BEGIN
         validar_torneo_datos(p_nombre, p_fecha_inicio, p_fecha_termino, p_cupos);
         BEGIN
-            SELECT m.MAX_JUGADORES_POR_EQUIPO INTO v_max
+            SELECT m.MIN_JUGADORES_POR_EQUIPO, m.MAX_JUGADORES_POR_EQUIPO INTO v_min, v_max
             FROM   SGCD_MODALIDADES m
             WHERE  m.ID_MODALIDAD = p_id_modalidad;
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 RAISE_APPLICATION_ERROR(-20060, 'La modalidad no existe');
         END;
-        IF p_max_jugadores IS NOT NULL THEN
-            v_max := p_max_jugadores;
+        IF p_min_jugadores IS NOT NULL THEN
+            v_min := p_min_jugadores;
+        ELSIF p_max_jugadores IS NOT NULL THEN
+            v_min := LEAST(v_min, p_max_jugadores);
         END IF;
-        IF v_max IS NULL OR v_max < 1 OR v_max > 50 OR v_max <> TRUNC(v_max) THEN
-            RAISE_APPLICATION_ERROR(-20060, 'El maximo de jugadores debe estar entre 1 y 50');
+        v_max := NVL(p_max_jugadores, v_max);
+        IF v_min IS NULL OR v_max IS NULL OR v_min < 1 OR v_max > 50
+           OR v_min > v_max OR v_min <> TRUNC(v_min) OR v_max <> TRUNC(v_max) THEN
+            RAISE_APPLICATION_ERROR(-20060, 'El rango de jugadores debe estar entre 1 y 50');
         END IF;
 
         INSERT INTO SGCD_TORNEOS (ID_MODALIDAD, NOMBRE_TORNEO, FECHA_INICIO, FECHA_TERMINO,
-                                  CUPOS_TORNEO, MAX_JUGADORES_POR_EQUIPO, ESTADO_TORNEO)
+                                  CUPOS_TORNEO, MIN_JUGADORES_POR_EQUIPO, MAX_JUGADORES_POR_EQUIPO, ESTADO_TORNEO)
         VALUES (p_id_modalidad, TRIM(p_nombre), TRUNC(p_fecha_inicio), TRUNC(p_fecha_termino),
-                p_cupos, v_max, 'PLANIFICADO')
+                p_cupos, v_min, v_max, 'PLANIFICADO')
         RETURNING ID_TORNEO INTO p_id_torneo;
     END crear_torneo;
 
@@ -365,6 +376,70 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
         recalcular_plantilla(p_id_inscripcion);
     END agregar_jugador;
 
+    PROCEDURE preparar_plantilla(
+        p_id_inscripcion NUMBER,
+        p_nombre_equipo  VARCHAR2) IS
+        v_id_torneo       NUMBER;
+        v_id_cliente      NUMBER;
+        v_estado_insc     VARCHAR2(15);
+        v_estado_torneo   VARCHAR2(15);
+        v_id_capitan      NUMBER;
+        v_repetido        NUMBER;
+    BEGIN
+        IF p_id_inscripcion IS NULL THEN
+            RAISE_APPLICATION_ERROR(-20068, 'Falta la inscripcion');
+        END IF;
+        IF p_nombre_equipo IS NULL OR TRIM(p_nombre_equipo) IS NULL THEN
+            RAISE_APPLICATION_ERROR(-20060, 'La inscripcion necesita nombre de equipo');
+        END IF;
+        BEGIN
+            SELECT i.ID_TORNEO, i.ID_CLIENTE, i.ESTADO_INSCRIPCION
+            INTO   v_id_torneo, v_id_cliente, v_estado_insc
+            FROM   SGCD_INSCRIPCIONES_TORNEO i
+            WHERE  i.ID_INSCRIPCION = p_id_inscripcion
+            FOR UPDATE;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE_APPLICATION_ERROR(-20068, 'La inscripcion no existe');
+        END;
+        SELECT t.ESTADO_TORNEO INTO v_estado_torneo
+        FROM   SGCD_TORNEOS t
+        WHERE  t.ID_TORNEO = v_id_torneo
+        FOR UPDATE;
+        IF v_estado_insc <> 'INSCRITO' THEN
+            RAISE_APPLICATION_ERROR(-20068, 'La inscripcion esta ' || v_estado_insc);
+        END IF;
+        IF v_estado_torneo <> 'PLANIFICADO' THEN
+            RAISE_APPLICATION_ERROR(-20062,
+                'El torneo esta ' || v_estado_torneo || ' y no admite cambios de plantilla');
+        END IF;
+        SELECT COUNT(*) INTO v_repetido
+        FROM   SGCD_INSCRIPCIONES_TORNEO i
+        WHERE  i.ID_TORNEO = v_id_torneo
+          AND  i.NOMBRE_EQUIPO = TRIM(p_nombre_equipo)
+          AND  i.ID_INSCRIPCION <> p_id_inscripcion;
+        IF v_repetido > 0 THEN
+            RAISE_APPLICATION_ERROR(-20069, 'Ya hay un equipo con ese nombre en el torneo');
+        END IF;
+        BEGIN
+            SELECT j.ID_JUGADOR INTO v_id_capitan
+            FROM   SGCD_EQUIPOS_JUGADORES ej
+            JOIN   SGCD_JUGADORES j ON j.ID_JUGADOR = ej.ID_JUGADOR
+            WHERE  ej.ID_INSCRIPCION = p_id_inscripcion
+              AND  j.ID_CLIENTE = v_id_cliente;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE_APPLICATION_ERROR(-20068, 'La inscripcion no tiene capitan');
+        END;
+        DELETE FROM SGCD_EQUIPOS_JUGADORES
+        WHERE  ID_INSCRIPCION = p_id_inscripcion
+          AND  ID_JUGADOR <> v_id_capitan;
+        UPDATE SGCD_INSCRIPCIONES_TORNEO
+        SET    NOMBRE_EQUIPO = TRIM(p_nombre_equipo)
+        WHERE  ID_INSCRIPCION = p_id_inscripcion;
+        recalcular_plantilla(p_id_inscripcion);
+    END preparar_plantilla;
+
     PROCEDURE retirar_equipo(p_id_inscripcion NUMBER) IS
         v_estado      VARCHAR2(15);
         v_id_torneo   NUMBER;
@@ -401,13 +476,14 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
     PROCEDURE ajustar_maximo(p_id_torneo NUMBER, p_max_jugadores NUMBER) IS
         v_id   NUMBER;
         v_mayor NUMBER;
+        v_min NUMBER;
     BEGIN
         IF p_max_jugadores IS NULL OR p_max_jugadores < 1 OR p_max_jugadores > 50
            OR p_max_jugadores <> TRUNC(p_max_jugadores) THEN
             RAISE_APPLICATION_ERROR(-20060, 'El maximo de jugadores debe estar entre 1 y 50');
         END IF;
         BEGIN
-            SELECT t.ID_TORNEO INTO v_id
+            SELECT t.ID_TORNEO, t.MIN_JUGADORES_POR_EQUIPO INTO v_id, v_min
             FROM   SGCD_TORNEOS t
             WHERE  t.ID_TORNEO = p_id_torneo
             FOR UPDATE;
@@ -419,7 +495,7 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
         FROM   SGCD_INSCRIPCIONES_TORNEO i
         WHERE  i.ID_TORNEO = p_id_torneo
           AND  i.ESTADO_INSCRIPCION = 'INSCRITO';
-        IF p_max_jugadores < v_mayor THEN
+        IF p_max_jugadores < v_mayor OR p_max_jugadores < v_min THEN
             RAISE_APPLICATION_ERROR(-20064,
                 'Hay un equipo activo con ' || v_mayor || ' jugadores');
         END IF;
@@ -427,6 +503,32 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
         SET    MAX_JUGADORES_POR_EQUIPO = p_max_jugadores
         WHERE  ID_TORNEO = p_id_torneo;
     END ajustar_maximo;
+
+    PROCEDURE ajustar_rango(p_id_torneo NUMBER, p_min_jugadores NUMBER, p_max_jugadores NUMBER) IS
+        v_mayor NUMBER;
+    BEGIN
+        IF p_min_jugadores IS NULL OR p_max_jugadores IS NULL OR p_min_jugadores < 1
+           OR p_max_jugadores > 50 OR p_min_jugadores > p_max_jugadores
+           OR p_min_jugadores <> TRUNC(p_min_jugadores) OR p_max_jugadores <> TRUNC(p_max_jugadores) THEN
+            RAISE_APPLICATION_ERROR(-20060, 'El rango de jugadores debe estar entre 1 y 50');
+        END IF;
+        BEGIN
+            SELECT ID_TORNEO INTO v_mayor FROM SGCD_TORNEOS
+            WHERE ID_TORNEO = p_id_torneo FOR UPDATE;
+        EXCEPTION WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20061, 'El torneo no existe');
+        END;
+        SELECT NVL(MAX(CANTIDAD_JUGADORES), 0) INTO v_mayor
+        FROM SGCD_INSCRIPCIONES_TORNEO
+        WHERE ID_TORNEO = p_id_torneo AND ESTADO_INSCRIPCION = 'INSCRITO';
+        IF v_mayor > p_max_jugadores THEN
+            RAISE_APPLICATION_ERROR(-20064, 'Hay un equipo activo con ' || v_mayor || ' jugadores');
+        END IF;
+        UPDATE SGCD_TORNEOS
+        SET MIN_JUGADORES_POR_EQUIPO = p_min_jugadores,
+            MAX_JUGADORES_POR_EQUIPO = p_max_jugadores
+        WHERE ID_TORNEO = p_id_torneo;
+    END ajustar_rango;
 
     PROCEDURE programar_torneo(
         p_id_torneo  NUMBER,
@@ -487,7 +589,7 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
                    (SELECT COUNT(*) FROM SGCD_INSCRIPCIONES_TORNEO i
                     WHERE i.ID_TORNEO = t.ID_TORNEO
                       AND i.ESTADO_INSCRIPCION = 'INSCRITO') AS INSCRITOS,
-                   t.MAX_JUGADORES_POR_EQUIPO, t.ESTADO_TORNEO,
+                   t.MIN_JUGADORES_POR_EQUIPO, t.MAX_JUGADORES_POR_EQUIPO, t.ESTADO_TORNEO,
                    (SELECT MAX(i.ID_INSCRIPCION) FROM SGCD_INSCRIPCIONES_TORNEO i
                     WHERE i.ID_TORNEO = t.ID_TORNEO
                       AND i.ESTADO_INSCRIPCION = 'INSCRITO'
@@ -524,7 +626,7 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
             SELECT i.ID_INSCRIPCION, i.ID_TORNEO, t.NOMBRE_TORNEO,
                    i.NOMBRE_EQUIPO, i.ID_CLIENTE, c.NOMBRE_CLIENTE AS CAPITAN,
                    i.CANTIDAD_JUGADORES, i.FECHA_INSCRIPCION,
-                   i.ESTADO_INSCRIPCION, t.MAX_JUGADORES_POR_EQUIPO
+                   i.ESTADO_INSCRIPCION, t.MIN_JUGADORES_POR_EQUIPO, t.MAX_JUGADORES_POR_EQUIPO
             FROM   SGCD_INSCRIPCIONES_TORNEO i
             JOIN   SGCD_TORNEOS t ON t.ID_TORNEO = i.ID_TORNEO
             JOIN   SGCD_CLIENTES c ON c.ID_CLIENTE = i.ID_CLIENTE
@@ -538,9 +640,11 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
         OPEN p_cursor FOR
             SELECT j.ID_JUGADOR,
                    j.RUT_JUGADOR || '-' || j.DV_JUGADOR AS RUT,
-                   j.NOMBRE_JUGADOR
+                   j.NOMBRE_JUGADOR,
+                   CASE WHEN j.ID_CLIENTE = i.ID_CLIENTE THEN 1 ELSE 0 END AS ES_CAPITAN
             FROM   SGCD_EQUIPOS_JUGADORES ej
             JOIN   SGCD_JUGADORES j ON j.ID_JUGADOR = ej.ID_JUGADOR
+            JOIN   SGCD_INSCRIPCIONES_TORNEO i ON i.ID_INSCRIPCION = ej.ID_INSCRIPCION
             WHERE  ej.ID_INSCRIPCION = p_id_inscripcion
             ORDER  BY j.NOMBRE_JUGADOR;
     END jugadores_inscripcion;

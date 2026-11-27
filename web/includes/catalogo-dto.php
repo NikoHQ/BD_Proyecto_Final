@@ -30,7 +30,23 @@ function catalogoPanel(): array
             'direccion' => $fila['DIRECCION_RECINTO'],
             'estado' => $fila['ESTADO_RECINTO'],
             'horarios' => [],
+            'bloques' => [],
         ];
+    }
+    foreach (catalogoFilas(
+        'SELECT h.ID_RECINTO, h.DIA_SEMANA, TRIM(b.HORA_INICIO) AS INICIO, TRIM(b.HORA_TERMINO) AS TERMINO
+           FROM SGCD_BLOQUES_HORARIOS b
+           JOIN SGCD_HORARIOS h ON h.ID_HORARIO = b.ID_HORARIO
+          ORDER BY h.ID_RECINTO, h.DIA_SEMANA, b.HORA_INICIO'
+    ) as $fila) {
+        $id = (int) $fila['ID_RECINTO'];
+        $dia = (int) $fila['DIA_SEMANA'];
+        if (isset($recintos[$id])) {
+            $recintos[$id]['bloques'][$dia][] = [
+                'inicio' => $fila['INICIO'],
+                'termino' => $fila['TERMINO'],
+            ];
+        }
     }
     foreach (catalogoFilas(
         'SELECT ID_RECINTO, DIA_SEMANA, TRIM(HORA_APERTURA) AS APERTURA, TRIM(HORA_CIERRE) AS CIERRE
@@ -78,9 +94,10 @@ function catalogoPanel(): array
         'id' => (int) $fila['ID_MODALIDAD'],
         'nombre' => $fila['NOMBRE_MODALIDAD'],
         'deporte' => $fila['NOMBRE_DEPORTE'],
+        'minimo' => (int) $fila['MIN_JUGADORES_POR_EQUIPO'],
         'maximo' => (int) $fila['MAX_JUGADORES_POR_EQUIPO'],
     ], catalogoFilas(
-        'SELECT m.ID_MODALIDAD, m.NOMBRE_MODALIDAD, d.NOMBRE_DEPORTE, m.MAX_JUGADORES_POR_EQUIPO
+        'SELECT m.ID_MODALIDAD, m.NOMBRE_MODALIDAD, d.NOMBRE_DEPORTE, m.MIN_JUGADORES_POR_EQUIPO, m.MAX_JUGADORES_POR_EQUIPO
            FROM SGCD_MODALIDADES m
            JOIN SGCD_DEPORTES d ON d.ID_DEPORTE = m.ID_DEPORTE
           WHERE m.ESTADO_MODALIDAD = \'ACTIVO\'

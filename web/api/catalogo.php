@@ -13,8 +13,6 @@ require_once __DIR__ . '/../includes/catalogo-dto.php';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     apiFail('Metodo no permitido.', 405);
 }
-apiSesion(['CLIENTE']);
-
 try {
     apiOk(catalogoPanel());
 } catch (Throwable $error) {

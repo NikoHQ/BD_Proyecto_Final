@@ -116,7 +116,10 @@ function ventanaAgenda(fecha) {
 
 async function asegurarAgenda(fecha) {
   const ventana = ventanaAgenda(fecha);
-  await cargarAgenda(ventana.desde, ventana.hasta);
+  // Las solicitudes web pueden haberse creado mientras el panel estaba abierto.
+  // Al entrar a Agenda o Reservas se relee Oracle, conservando el mapa local
+  // sólo como estructura de presentación.
+  await cargarAgenda(ventana.desde, ventana.hasta, { forzar: true });
 }
 
 async function recargarAgenda(fecha) {
@@ -154,7 +157,7 @@ const torneosApi = {
   inscribir: datos => apiPost('/dashboardadmin/api/torneos.php', { accion: 'inscribir' }, datos),
   agregar: datos => apiPost('/dashboardadmin/api/torneos.php', { accion: 'agregar' }, datos),
   retirar: id => apiPost('/dashboardadmin/api/torneos.php', { accion: 'retirar' }, { inscripcion: id }),
-  maximo: (torneo, maximo) => apiPost('/dashboardadmin/api/torneos.php', { accion: 'maximo' }, { torneo, maximo }),
+  rango: (torneo, minimo, maximo) => apiPost('/dashboardadmin/api/torneos.php', { accion: 'rango' }, { torneo, minimo, maximo }),
   programar: datos => apiPost('/dashboardadmin/api/torneos.php', { accion: 'programar' }, datos)
 };
 

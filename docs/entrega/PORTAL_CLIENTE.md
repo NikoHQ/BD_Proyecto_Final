@@ -24,8 +24,8 @@ Verifica los conflictos con una reserva existente en Oracle. Las inscripciones s
 
 1. Abre [Torneos](http://127.0.0.1:8080/?vista=torneos) y elige un evento con inscripciones abiertas. Revisa sus horarios, cupos y máximo de jugadores.
 2. Inicia sesión, si corresponde. El portal vuelve al torneo y asigna al titular de la cuenta como capitán.
-3. Ingresa el nombre del equipo y añade sólo los compañeros que van a jugar. Para cada integrante adicional se pide nombre y RUT con DV. Por ejemplo, **Torneo Pádel Mixto** admite hasta dos personas en la demo, incluido el capitán. El formulario permite guardar al capitán solo o agregar un compañero.
-4. Revisa y guarda. **Mis inscripciones** muestra el equipo y su plantilla. Editar o retirar depende del plazo y estado de la competencia.
+3. Selecciona **Preparar inscripción**. El titular de la cuenta queda fijo como capitán y el formulario exige el mínimo configurado, con suplentes opcionales hasta el máximo. Cada integrante adicional requiere nombre y RUT con DV. Por ejemplo, **Torneo Pádel Mixto** exige capitán más un compañero; **Fútbol 6** exige seis jugadores y permite hasta diez.
+4. Revisa la plantilla y selecciona **Confirmar inscripción**. Sólo ese paso ocupa un cupo. **Ver mi plantilla** permite editar el nombre del equipo y reemplazar sus compañeros como un conjunto mientras el torneo siga planificado; el capitán no cambia desde el portal.
 5. Desde **Torneos → Ver equipos** del panel, recepción puede revisar la inscripción y el cupo consumido.
 
 ## Datos compartidos

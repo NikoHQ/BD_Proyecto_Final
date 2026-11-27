@@ -52,6 +52,7 @@ package "Recinto y catalogos" {
     --
     ID_DEPORTE : NUMBER <<FK>>
     NOMBRE_MODALIDAD : VARCHAR2(80)
+    MIN_JUGADORES_POR_EQUIPO : NUMBER
     MAX_JUGADORES_POR_EQUIPO : NUMBER
     ESTADO_MODALIDAD : VARCHAR2(10)
   }
@@ -99,6 +100,7 @@ package "Recinto y catalogos" {
     FECHA_INICIO : DATE
     FECHA_TERMINO : DATE
     CUPOS_TORNEO : NUMBER
+    MIN_JUGADORES_POR_EQUIPO : NUMBER
     MAX_JUGADORES_POR_EQUIPO : NUMBER
     ESTADO_TORNEO : VARCHAR2(15)
   }
@@ -245,9 +247,9 @@ N2 .. TARIFA
 note "Inscripcion de equipos" as N3
   Cada equipo inscrito ocupa un cupo. El cliente es el responsable.
   La plantilla incluye al capitán y coincide con CANTIDAD_JUGADORES:
-  entre 1 y el máximo del torneo. Guardar equipo y plantilla en una transacción.
-  Al crear el torneo se copia el maximo de su modalidad.
-  Futbol 6: 10 por defecto (6 titulares y 4 suplentes).
+  entre el mínimo y el máximo del torneo. Guardar equipo y plantilla en una transacción.
+  Al crear el torneo se copia el rango de su modalidad.
+  Fútbol 6: 6 a 10 (6 titulares y hasta 4 suplentes).
   El administrador puede ajustar el maximo de cada torneo
   respetando la cantidad de los equipos ya inscritos.
 end note

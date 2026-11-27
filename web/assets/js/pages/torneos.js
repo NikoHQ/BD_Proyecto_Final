@@ -79,7 +79,7 @@ function tournamentView() {
           <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
             <div><div class="d-flex flex-wrap align-items-center gap-2"><h2 id="tournament-title">${escapeHtml(torneo.nombre)}</h2>${tournamentStateBadge(torneo)}</div>
               <p class="small text-secondary mb-0">${escapeHtml(torneo.modalidad.nombre)} · ${tournamentDates(torneo)}</p>
-              <p class="small text-secondary mb-0">Máximo ${torneo.maximo} ${torneo.maximo === 1 ? 'jugador' : 'jugadores'} por equipo</p></div>
+              <p class="small text-secondary mb-0">${torneo.minimo}–${torneo.maximo} jugadores por equipo</p></div>
             <div class="d-flex flex-wrap gap-2">
               ${button('tournament-agenda', `${icon('calendar3')} Ver en Agenda`, 'btn btn-light border btn-sm')}
               ${abierto ? button('register-team', `${icon('person-plus')} Inscribir equipo`, 'btn-accent btn-sm') : ''}
@@ -124,11 +124,12 @@ const mostrarErrorTorneo = mensaje => { const nodo = $('tournament-form-error');
 
 function openTournamentConfig() {
   showDialog('Nuevo torneo', `<form id="tournament-config-form" class="row g-3">
-    <div class="col-12">${editSelect('modalidad', 'Modalidad', panel.modalidades.map(m => [m.id, `${m.nombre} · hasta ${m.maximo} por equipo`]), panel.modalidades[0]?.id)}</div>
+    <div class="col-12">${editSelect('modalidad', 'Modalidad', panel.modalidades.map(m => [m.id, `${m.nombre} · ${m.minimo}–${m.maximo} por equipo`]), panel.modalidades[0]?.id)}</div>
     <div class="col-12">${field('nombre', 'Nombre del torneo', '', 'required maxlength="100"')}</div>
     <div class="col-6">${field('inicio', 'Fecha de inicio', localClock()[0], 'type="date" required')}</div>
     <div class="col-6">${field('fin', 'Fecha de término', localClock()[0], 'type="date" required')}</div>
     <div class="col-6">${field('cupos', 'Cupos de equipos', '8', 'type="number" min="1" max="128" required')}</div>
+    <div class="col-6">${field('minimo', 'Mínimo por equipo', '')}<small class="text-secondary">Vacío = el mínimo de la modalidad.</small></div>
     <div class="col-6">${field('maximo', 'Máximo por equipo', '')}<small class="text-secondary">Vacío = el máximo de la modalidad.</small></div>
     ${errorTorneo}
     <div class="d-flex justify-content-end"><button class="btn btn-accent">Crear torneo</button></div></form>`);
@@ -173,11 +174,12 @@ function openTournamentSchedule() {
 
 function openAdjustMaximum() {
   const torneo = torneoActual();
-  showDialog(`Ajustar máximo · ${torneo.nombre}`, `<form id="tournament-maximum-form" class="row g-3">
-    <div class="col-12">${field('maximo', 'Máximo de jugadores por equipo', torneo.maximo, 'type="number" min="1" max="50" required')}</div>
-    <p class="small text-secondary mb-0">No puede quedar bajo la plantilla activa más grande (${torneo.maximo} por ahora).</p>
+  showDialog(`Ajustar plantilla · ${torneo.nombre}`, `<form id="tournament-maximum-form" class="row g-3">
+    <div class="col-6">${field('minimo', 'Mínimo por equipo', torneo.minimo, 'type="number" min="1" max="50" required')}</div>
+    <div class="col-6">${field('maximo', 'Máximo por equipo', torneo.maximo, 'type="number" min="1" max="50" required')}</div>
+    <p class="small text-secondary mb-0">El máximo no puede quedar bajo la plantilla activa más grande.</p>
     ${errorTorneo}
-    <div class="d-flex justify-content-end"><button class="btn btn-accent">Guardar máximo</button></div></form>`);
+    <div class="d-flex justify-content-end"><button class="btn btn-accent">Guardar rango</button></div></form>`);
 }
 
 async function openTournamentTeams(inscripcion) {
@@ -225,7 +227,7 @@ async function guardarTorneo(form) {
   try {
     const creado = await torneosApi.crear({
       modalidad: Number(datos.modalidad), nombre: datos.nombre, inicio: datos.inicio, fin: datos.fin,
-      cupos: Number(datos.cupos), maximo: datos.maximo === '' ? '' : Number(datos.maximo)
+      cupos: Number(datos.cupos), minimo: datos.minimo === '' ? '' : Number(datos.minimo), maximo: datos.maximo === '' ? '' : Number(datos.maximo)
     });
     selectedTournament = creado.id;
     dialog.hide();
@@ -275,10 +277,10 @@ async function guardarProgramacion(form) {
 async function guardarMaximo(form) {
   const datos = Object.fromEntries(new FormData(form));
   try {
-    await torneosApi.maximo(torneoActual().id, Number(datos.maximo));
+    await torneosApi.rango(torneoActual().id, Number(datos.minimo), Number(datos.maximo));
     dialog.hide();
     await cargarPantallaTorneos();
-    feedback('Máximo actualizado.');
+    feedback('Rango actualizado.');
     render();
   } catch (error) { mostrarErrorTorneo(error.message); }
 }

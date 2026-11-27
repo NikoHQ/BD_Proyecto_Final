@@ -28,6 +28,7 @@ function torneosLista(array $filtros = []): array
         'termino' => substr((string) $f['FECHA_TERMINO'], 0, 10),
         'cupos' => (int) $f['CUPOS_TORNEO'],
         'inscritos' => (int) $f['INSCRITOS'],
+        'minimo' => (int) $f['MIN_JUGADORES_POR_EQUIPO'],
         'maximo' => (int) $f['MAX_JUGADORES_POR_EQUIPO'],
         'estado' => $f['ESTADO_TORNEO'],
         'mi_inscripcion' => $f['MI_INSCRIPCION'] === null ? null : (int) $f['MI_INSCRIPCION'],
@@ -84,11 +85,13 @@ function inscripcionDetalle(int $id): ?array
         'cantidad' => (int) $f['CANTIDAD_JUGADORES'],
         'fecha' => substr((string) $f['FECHA_INSCRIPCION'], 0, 10),
         'estado' => $f['ESTADO_INSCRIPCION'],
+        'minimo' => (int) $f['MIN_JUGADORES_POR_EQUIPO'],
         'maximo' => (int) $f['MAX_JUGADORES_POR_EQUIPO'],
         'jugadores' => array_map(static fn(array $p): array => [
             'id' => (int) $p['ID_JUGADOR'],
             'rut' => $p['RUT'],
             'nombre' => $p['NOMBRE_JUGADOR'],
+            'capitan' => (int) ($p['ES_CAPITAN'] ?? 0) === 1,
         ], $j['filas']),
     ];
 }

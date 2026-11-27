@@ -28,17 +28,35 @@ const canRegisterReservationPayment = row =>
   !row.torneoId && row.estado === 'confirmed' && document.body.dataset.accountRole === 'ADMINISTRADOR';
 
 const reservationStateLabel = row => row.torneoId ? tournamentBadge() : badge(row.estado);
+const esSolicitudWebPendiente = row => !row.torneoId && row.origen === 'Web' && row.estado === 'pending';
+const puedeResolverSolicitudWeb = row => esSolicitudWebPendiente(row) && document.body.dataset.accountRole === 'ADMINISTRADOR';
 
 function reservationActionsMenu(row) {
   if (row.torneoId) return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end"><li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li></ul></div>`;
-  const editable = ['pending', 'confirmed'].includes(row.estado);
+  const solicitudWeb = esSolicitudWebPendiente(row);
+  const editable = ['pending', 'confirmed'].includes(row.estado) && !solicitudWeb;
   return `<div class="dropdown"><button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="Acciones de ${label(row)}">${icon('three-dots-vertical')}</button><ul class="dropdown-menu dropdown-menu-end">
     <li><button class="dropdown-item" data-action="reservation-menu-${row.id}">Ver detalle</button></li>
-    ${row.estado === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR' ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Confirmar</button></li>` : ''}
+    ${puedeResolverSolicitudWeb(row) ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Aprobar solicitud</button></li><li><button class="dropdown-item text-danger" data-action="ask-cancel-${row.id}">Rechazar solicitud</button></li>` : ''}
+    ${row.estado === 'pending' && !solicitudWeb && document.body.dataset.accountRole === 'ADMINISTRADOR' ? `<li><button class="dropdown-item" data-action="confirm-${row.id}">Confirmar</button></li>` : ''}
     ${editable ? `<li><button class="dropdown-item" data-action="edit-reservation-${row.id}">Reprogramar</button></li>` : ''}
     ${canRegisterReservationPayment(row) ? `<li><button class="dropdown-item" data-action="payment-reservation-${row.id}">Registrar pago</button></li>` : ''}
     ${editable ? `<li><hr class="dropdown-divider"></li><li><button class="dropdown-item text-danger" data-action="ask-cancel-${row.id}">Cancelar reserva</button></li>` : ''}
   </ul></div>`;
+}
+
+function solicitudesWebPendientes(rows) {
+  if (!rows.length) return '';
+  const items = [...rows]
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.start.localeCompare(b.start))
+    .map(row => `<tr data-reservation="${row.id}">
+      <td><strong>${escapeHtml(row.cliente)}</strong><small class="d-block text-secondary">${label(row)}</small></td>
+      <td>${escapeHtml(row.cancha)}<small class="d-block text-secondary">${escapeHtml(row.modalidad)}</small></td>
+      <td>${dayLabel(row.fecha)}<small class="d-block text-secondary">${row.start}–${row.end}</small></td>
+      <td>${money.format(row.importe)}</td>
+      <td><div class="d-flex flex-wrap gap-1 justify-content-end">${button(`confirm-${row.id}`, 'Aprobar', 'btn-accent btn-sm')}${button(`ask-cancel-${row.id}`, 'Rechazar solicitud', 'btn btn-outline-danger btn-sm')}</div></td>
+    </tr>`).join('');
+  return `<section class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"><div><h2 class="card-title mb-0">Solicitudes web pendientes</h2><p class="small text-secondary mb-0">Aprueba o rechaza las reservas solicitadas por clientes antes de ocupar la cancha.</p></div><span class="status pending">${icon('hourglass-split')} ${rows.length}</span></div><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Cliente</th><th>Cancha</th><th>Fecha y horario</th><th>Total</th><th class="text-end">Decisión</th></tr></thead><tbody>${items}</tbody></table></div></section>`;
 }
 
 function reservationFilters(rows) {
@@ -56,8 +74,12 @@ function reservationFilters(rows) {
 
 function reservationDetailPanel(row) {
   if (!row) return card('Detalle de reserva', '<div class="card-body"><p class="empty px-0">Selecciona una reserva para ver sus datos y acciones.</p></div>');
-  const editable = ['pending', 'confirmed'].includes(row.estado) && !row.torneoId;
-  const actions = row.estado === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR' ? button(`confirm-${row.id}`, 'Confirmar reserva', 'btn-accent w-100') : '';
+  const solicitudWeb = esSolicitudWebPendiente(row);
+  const editable = ['pending', 'confirmed'].includes(row.estado) && !row.torneoId && !solicitudWeb;
+  const actions = puedeResolverSolicitudWeb(row)
+    ? button(`confirm-${row.id}`, 'Aprobar solicitud', 'btn-accent w-100')
+    : row.estado === 'pending' && document.body.dataset.accountRole === 'ADMINISTRADOR'
+      ? button(`confirm-${row.id}`, 'Confirmar reserva', 'btn-accent w-100') : '';
   return card('Detalle de reserva', `<div class="card-body reservation-detail">
     <div class="d-flex justify-content-between gap-2 align-items-start"><strong class="fs-5">${label(row)}</strong>${reservationStateLabel(row)}</div>
     <dl class="detail-list">
@@ -69,7 +91,7 @@ function reservationDetailPanel(row) {
       <dt>${icon('share')} Origen</dt><dd>${escapeHtml(row.origen)}</dd>
       <dt>${icon('cash-stack')} Total</dt><dd>${money.format(row.importe)}</dd>
     </dl>
-    <div class="d-grid gap-2 mt-3">${actions}${editable ? button(`edit-reservation-${row.id}`, `${icon('pencil')} Reprogramar`, 'btn btn-light border') : ''}${canRegisterReservationPayment(row) ? button(`payment-reservation-${row.id}`, `${icon('credit-card')} Registrar pago`, 'btn btn-light border') : ''}${editable ? button(`ask-cancel-${row.id}`, 'Cancelar reserva', 'btn btn-outline-danger') : ''}</div>
+    <div class="d-grid gap-2 mt-3">${actions}${solicitudWeb && puedeResolverSolicitudWeb(row) ? button(`ask-cancel-${row.id}`, 'Rechazar solicitud', 'btn btn-outline-danger') : ''}${editable ? button(`edit-reservation-${row.id}`, `${icon('pencil')} Reprogramar`, 'btn btn-light border') : ''}${canRegisterReservationPayment(row) ? button(`payment-reservation-${row.id}`, `${icon('credit-card')} Registrar pago`, 'btn btn-light border') : ''}${editable ? button(`ask-cancel-${row.id}`, 'Cancelar reserva', 'btn btn-outline-danger') : ''}</div>
   </div>`);
 }
 
@@ -80,10 +102,10 @@ function reservationsView() {
   reservationPage = Math.min(reservationPage, pageCount);
   const pageStart = (reservationPage - 1) * reservationPageSize;
   const visibleRows = filtered.slice(pageStart, pageStart + reservationPageSize);
-  if (!selectedReservationId || !filtered.some(row => row.id === selectedReservationId)) selectedReservationId = visibleRows[0]?.id || null;
+  if (!selectedReservationId || !allRows.some(row => row.id === selectedReservationId)) selectedReservationId = visibleRows[0]?.id || null;
   const selected = allRows.find(row => row.id === selectedReservationId);
   const todayRows = allRows.filter(row => row.fecha === date && row.estado !== 'cancelled');
-  const pendingRows = todayRows.filter(row => row.estado === 'pending');
+  const webPendingRows = allRows.filter(esSolicitudWebPendiente);
   const projected = todayRows.filter(row => !row.torneoId).reduce((sum, row) => sum + row.importe, 0);
   const statusOptions = `<option value="">Todos los estados</option>${Object.entries(statuses).filter(([key]) => key !== 'maintenance').map(([key, value]) => `<option value="${key}" ${key === statusFilter ? 'selected' : ''}>${value}</option>`).join('')}`;
   const courtOptions = `<option value="">Todas las canchas</option>${panel.canchas.map(cancha => `<option value="${cancha.id}" ${reservationCourtFilter !== '' && Number(reservationCourtFilter) === cancha.id ? 'selected' : ''}>${escapeHtml(cancha.nombre)} · ${escapeHtml(nombreRecinto(cancha.recinto))}</option>`).join('')}`;
@@ -92,10 +114,10 @@ function reservationsView() {
       <td><button class="reservation-link" data-reservation="${row.id}">${label(row)}</button></td><td>${escapeHtml(row.cliente)}</td><td>${escapeHtml(row.cancha)}</td><td>${row.start}–${row.end}</td>
       <td>${reservationStateLabel(row)}</td><td>${money.format(row.importe)}</td><td>${escapeHtml(row.origen)}</td>
       <td>${reservationActionsMenu(row)}</td></tr>`).join('');
-  const actions = `<a class="btn btn-outline-secondary" href="/dashboardadmin/solicitudes-web.php">Solicitudes web</a>
-    ${button('new', `${icon('plus-lg')} Nueva reserva`, 'btn-accent')}`;
+  const actions = button('new', `${icon('plus-lg')} Nueva reserva`, 'btn-accent');
   return `${heading('Reservas', 'Gestiona reservas, confirmaciones y pagos.', actions)}
-    <div class="row g-2 mb-3">${metric('calendar2-check', 'Reservas del día', todayRows.length)}${metric('hourglass-split', 'Por confirmar', pendingRows.length)}${metric('exclamation-triangle', 'Torneos del día', todayRows.filter(row => row.torneoId).length)}${metric('cash-stack', 'Ingresos del día', money.format(projected))}</div>
+    <div class="row g-2 mb-3">${metric('calendar2-check', 'Reservas del día', todayRows.length)}${metric('hourglass-split', 'Solicitudes web por resolver', webPendingRows.length)}${metric('exclamation-triangle', 'Torneos del día', todayRows.filter(row => row.torneoId).length)}${metric('cash-stack', 'Ingresos del día', money.format(projected))}</div>
+    ${solicitudesWebPendientes(webPendingRows)}
     <div class="row g-3 reservation-layout"><div class="col-12 col-xxl-9">${card(`Reservas del ${dateLabel.format(new Date(`${date}T12:00:00`))}`, `<div class="card-body border-bottom reservation-tools">
       <div class="toolbar"><input id="reservation-query" type="search" class="form-control" value="${escapeHtml(reservationQuery)}" placeholder="Buscar por ID, cliente o cancha" aria-label="Buscar reservas"><div class="btn-group" role="group" aria-label="Periodo"><button class="btn btn-sm ${reservationDateScope === 'today' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-today">Día</button><button class="btn btn-sm ${reservationDateScope === 'all' ? 'btn-accent' : 'btn-light border'}" data-action="reservation-all">Todas</button></div></div>
       <div class="toolbar mt-2"><select id="reservation-status" class="form-select" aria-label="Filtrar por estado">${statusOptions}</select><select id="reservation-court" class="form-select" aria-label="Filtrar por cancha">${courtOptions}</select><select id="reservation-origin" class="form-select" aria-label="Filtrar por origen">${origins.map(origin => `<option value="${origin}" ${origin === reservationOriginFilter ? 'selected' : ''}>${origin || 'Todos los orígenes'}</option>`).join('')}</select><button class="btn btn-link ms-auto" data-action="clear-reservation-filters">Limpiar filtros</button></div></div>
