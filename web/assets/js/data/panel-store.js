@@ -158,7 +158,8 @@ const torneosApi = {
   agregar: datos => apiPost('/dashboardadmin/api/torneos.php', { accion: 'agregar' }, datos),
   retirar: id => apiPost('/dashboardadmin/api/torneos.php', { accion: 'retirar' }, { inscripcion: id }),
   rango: (torneo, minimo, maximo) => apiPost('/dashboardadmin/api/torneos.php', { accion: 'rango' }, { torneo, minimo, maximo }),
-  programar: datos => apiPost('/dashboardadmin/api/torneos.php', { accion: 'programar' }, datos)
+  programar: datos => apiPost('/dashboardadmin/api/torneos.php', { accion: 'programar' }, datos),
+  borrar: torneo => apiPost('/dashboardadmin/api/torneos.php', { accion: 'borrar' }, { torneo })
 };
 
 const clientesApi = {

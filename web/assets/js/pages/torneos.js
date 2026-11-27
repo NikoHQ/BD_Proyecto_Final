@@ -89,6 +89,7 @@ function tournamentView() {
           <div class="d-flex flex-wrap gap-2 mt-3">
             ${abierto ? button('schedule-tournament', 'Programar cancha') : ''}
             ${abierto ? button('adjust-maximum', 'Ajustar máximo') : ''}
+            ${button('delete-tournament', 'Eliminar torneo', 'btn btn-outline-danger btn-sm')}
           </div>
         </div>
         <div class="tournament-schedule border-top border-bottom">
@@ -300,6 +301,30 @@ async function retirarEquipo(inscripcion) {
 function confirmarRetiro(inscripcion) {
   showDialog('Retirar equipo', `<p>Se retirará <strong>${escapeHtml(inscripcion.equipo)}</strong> del torneo y se liberará su cupo.</p>
     ${button(`confirm-withdraw-${inscripcion.id}`, 'Sí, retirar', 'btn-danger')}`);
+}
+
+function confirmarBorradoTorneo() {
+  const torneo = torneoActual();
+  if (!torneo) return;
+  showDialog(`Eliminar torneo · ${torneo.nombre}`, `<p>¿Eliminar <strong>${escapeHtml(torneo.nombre)}</strong>?</p>
+    <p class="text-danger small">También se eliminarán sus bloques programados y equipos inscritos. Esta acción no se puede deshacer.</p>
+    ${errorTorneo}
+    <div class="d-flex gap-2 flex-wrap"><button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>${button('confirm-delete-tournament', 'Eliminar torneo', 'btn-danger')}</div>`);
+}
+
+async function borrarTorneo() {
+  const torneo = torneoActual();
+  if (!torneo) return;
+  try {
+    await torneosApi.borrar(torneo.id);
+    panel.reservas.clear();
+    await recargarAgenda(torneo.inicio);
+    selectedTournament = null;
+    dialog.hide();
+    await cargarPantallaTorneos();
+    feedback('Torneo eliminado junto con sus bloques e inscripciones.');
+    render();
+  } catch (error) { mostrarErrorTorneo(error.message); }
 }
 
 document.addEventListener('input', event => {

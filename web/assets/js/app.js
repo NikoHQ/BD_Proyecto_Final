@@ -323,6 +323,8 @@ document.addEventListener('click', async event => {
   if (action === 'register-team') return openTeamRegistration();
   if (action === 'schedule-tournament') return openTournamentSchedule();
   if (action === 'adjust-maximum') return openAdjustMaximum();
+  if (action === 'delete-tournament') return confirmarBorradoTorneo();
+  if (action === 'confirm-delete-tournament') return borrarTorneo();
   if (action === 'tournament-agenda') {
     const torneo = torneoActual();
     if (torneo) { date = torneo.inicio; location.hash = 'agenda'; }

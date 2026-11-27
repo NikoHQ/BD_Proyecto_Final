@@ -60,6 +60,7 @@ CREATE OR REPLACE PACKAGE SGCD_PKG_TORNEOS AS
     PROCEDURE retirar_equipo(p_id_inscripcion NUMBER);
     PROCEDURE ajustar_maximo(p_id_torneo NUMBER, p_max_jugadores NUMBER);
     PROCEDURE ajustar_rango(p_id_torneo NUMBER, p_min_jugadores NUMBER, p_max_jugadores NUMBER);
+    PROCEDURE borrar_torneo(p_id_torneo NUMBER);
     PROCEDURE programar_torneo(
         p_id_torneo  NUMBER,
         p_id_cancha  NUMBER,
@@ -529,6 +530,33 @@ CREATE OR REPLACE PACKAGE BODY SGCD_PKG_TORNEOS AS
             MAX_JUGADORES_POR_EQUIPO = p_max_jugadores
         WHERE ID_TORNEO = p_id_torneo;
     END ajustar_rango;
+
+    PROCEDURE borrar_torneo(p_id_torneo NUMBER) IS
+        v_id_torneo NUMBER;
+    BEGIN
+        IF p_id_torneo IS NULL THEN
+            RAISE_APPLICATION_ERROR(-20061, 'Falta el torneo');
+        END IF;
+        BEGIN
+            SELECT ID_TORNEO INTO v_id_torneo
+            FROM   SGCD_TORNEOS
+            WHERE  ID_TORNEO = p_id_torneo
+            FOR UPDATE;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE_APPLICATION_ERROR(-20061, 'El torneo no existe');
+        END;
+
+        DELETE FROM SGCD_EQUIPOS_JUGADORES ej
+        WHERE  ej.ID_INSCRIPCION IN (
+            SELECT i.ID_INSCRIPCION
+            FROM   SGCD_INSCRIPCIONES_TORNEO i
+            WHERE  i.ID_TORNEO = v_id_torneo
+        );
+        DELETE FROM SGCD_RESERVAS WHERE ID_TORNEO = v_id_torneo;
+        DELETE FROM SGCD_INSCRIPCIONES_TORNEO WHERE ID_TORNEO = v_id_torneo;
+        DELETE FROM SGCD_TORNEOS WHERE ID_TORNEO = v_id_torneo;
+    END borrar_torneo;
 
     PROCEDURE programar_torneo(
         p_id_torneo  NUMBER,

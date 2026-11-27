@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../includes/torneos-dto.php';
  *   POST retirar       inscripcion
  *   POST rango         torneo, minimo, maximo
  *   POST programar     torneo, cancha, fecha, desde, hasta
+ *   POST borrar        torneo
  */
 
 $accion = (string) ($_GET['accion'] ?? 'torneos');
@@ -122,6 +123,13 @@ switch ($accion) {
             true
         );
         apiOk(['programado' => true], 201);
+        break;
+
+    case 'borrar':
+        apiLlamar('BEGIN SGCD_PKG_TORNEOS.borrar_torneo(:torneo); END;', [
+            'torneo' => apiEntero($entrada['torneo'] ?? null, 'torneo'),
+        ], true);
+        apiOk(['eliminado' => true]);
         break;
 
     default:
